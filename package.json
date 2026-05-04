@@ -4,9 +4,9 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "setup": "pnpm install",
+    "setup": "bash scripts/setup.sh",
     "dev": "mprocs",
-    "test": "pnpm -r test",
+    "test": "bash scripts/test-all.sh",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "migrate -path backend/migrations -database \"$DATABASE_URL\" up",
     "deploy:contracts": "bash scripts/deploy-contracts.sh",

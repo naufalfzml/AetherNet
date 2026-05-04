@@ -14,8 +14,8 @@
 - [x] 1.1 Init monorepo layout: `contracts/`, `backend/`, `frontend/`, `services/compute-sidecar/`, `packages/shared-types/`, `infra/`, `deployments/`, `scripts/`
 - [x] 1.2 Setup `pnpm-workspace.yaml` (cover `frontend`, `services/*`, `packages/*`) + root `package.json` dengan scripts: `setup`, `dev`, `test`, `db:up`, `db:migrate`, `deploy:contracts`, `seed:agents`
 - [x] 1.3 Setup `go.work` mencakup `backend/` (siap tambah service Go lain)
-- [ ] 1.4 Buat `mprocs.yaml` (proc: backend air, sidecar tsx watch, frontend next dev, indexer go run)
-- [ ] 1.5 Buat `scripts/setup.sh`, `scripts/test-all.sh`, `scripts/deploy-contracts.sh`, `scripts/seed-agents.sh` (chmod +x)
+- [x] 1.4 Buat `mprocs.yaml` (proc: backend air, sidecar tsx watch, frontend next dev, indexer go run)
+- [x] 1.5 Buat `scripts/setup.sh`, `scripts/test-all.sh`, `scripts/deploy-contracts.sh`, `scripts/seed-agents.sh` (chmod +x)
 - [ ] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
 - [ ] 1.7 Add `.editorconfig`, `.gitignore` per-folder, husky + lint-staged commit hooks (eslint + prettier + gofmt + forge fmt)
 - [ ] 1.8 Buat `docker-compose.yml` (postgres 16) + `.env.example` (root + per package)

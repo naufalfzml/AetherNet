@@ -1,0 +1,11 @@
+procs:
+  backend:
+    cwd: backend
+    shell: air || go run ./cmd/server
+  compute-sidecar:
+    shell: pnpm --filter @aethernet/compute-sidecar dev
+  frontend:
+    shell: pnpm --filter @aethernet/frontend dev
+  indexer:
+    cwd: backend
+    shell: go run ./cmd/indexer
