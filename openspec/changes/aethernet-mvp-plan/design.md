@@ -84,16 +84,16 @@ Greenfield → tidak ada migrasi. Urutan deploy: contracts → backend (dengan a
 
 ## Open Questions
 
-- Konfirmasi chainId Galileo final: `16601` (chainlist/thirdweb) vs `80087` (sumber X resmi 0G). Cek `https://chainlist.org` saat deploy.
+- Konfirmasi chainId Galileo final: `16601` (chainlist/thirdweb) vs `80087` (sumber X resmi 0G). Cek chainlist saat deploy.
 - DA retention window saat demo + judging.
 - Apakah `0g-da-client` v1.0.0-testnet stabil untuk hackathon, atau lebih aman pakai stub + simulasi DA?
 
 ## Riset Findings (snapshot saat propose)
 
 ### Testnet Galileo
-- RPC: `https://evmrpc-testnet.0g.ai`
-- Explorer: `https://chainscan-galileo.0g.ai`
-- Faucet: `https://faucet.0g.ai` (limit 0.1 OG/wallet/hari)
+- RPC: `<0G_GALILEO_RPC_URL>` (isi value asli hanya di `.env` lokal)
+- Explorer: `<0G_GALILEO_EXPLORER_URL>` (isi value asli hanya di `.env` lokal)
+- Faucet: `<0G_FAUCET_URL>` (isi value asli hanya di catatan lokal/browser)
 - Token: `OG`
 
 ### Smart Contract — ERC-7857

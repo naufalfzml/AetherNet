@@ -1,7 +1,7 @@
 ## 0. Pre-Sprint Research & Spike (Day 0)
 
 - [x] 0.1 Konfirmasi chainId Galileo final via `chainlist.org` + dokumentasi resmi (16601 vs 80087)
-- [ ] 0.2 **[MANUAL - KAMU]** Buat wallet testnet baru di MetaMask → tambah network Galileo (RPC: `https://evmrpc-testnet.0g.ai`, chainId: `16601`, symbol: `OG`) → claim faucet di `https://faucet.0g.ai` → copy `PRIVATE_KEY` ke `.env` lokal (jangan commit!)
+- [ ] 0.2 **[MANUAL - KAMU]** Buat wallet testnet baru di MetaMask → tambah network Galileo (RPC URL: `<0G_GALILEO_RPC_URL>`, chainId: `16601`, symbol: `OG`) → claim faucet (`<0G_FAUCET_URL>`) → copy `PRIVATE_KEY` ke `.env` lokal (jangan commit!)
 - [ ] 0.3 Clone & jalankan `0gfoundation/0g-storage-go-starter-kit` end-to-end (upload + retrieve)
 - [ ] 0.4 Clone & inspect `0glabs/0g-agent-nft` branch `eip-7857-draft` — pahami `mint/transfer/clone/authorizeUsage` & oracle interface
 - [ ] 0.5 Clone & jalankan `0gfoundation/0g-compute-ts-starter-kit` — sukses 1 LLM call + verifikasi TEE via `processResponse`
@@ -21,7 +21,7 @@
 - [x] 1.8 Buat `docker-compose.yml` (postgres 16) + `.env.example` (root + per package)
 - [x] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
 - [ ] 1.10 Provision Linux VPS, install Docker, Nginx, Node 20, pnpm, Go 1.22, PM2, Foundry
-- [ ] 1.11 Configure Nginx reverse proxy + Let's Encrypt TLS untuk `api.aethernet.dev`
+- [ ] 1.11 Configure Nginx reverse proxy + Let's Encrypt TLS untuk `<AETHERNET_API_DOMAIN>`
 - [ ] 1.12 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build), sidecar (tsc + test)
 - [ ] 1.13 **[MANUAL - KAMU]** Verifikasi `.env` sudah terisi `PRIVATE_KEY` + `OG_RPC_URL` + `OG_CHAIN_ID` dari task 0.2 → AI akan generate `.env.example` (tanpa value sensitif)
 

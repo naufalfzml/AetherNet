@@ -94,10 +94,10 @@ cd aethernet-0g
 
 cp .env.example .env
 # Edit .env — minimal isi:
-#   PRIVATE_KEY=0x...           (testnet wallet, JANGAN pakai mainnet key)
-#   OG_RPC_URL=https://evmrpc-testnet.0g.ai
-#   OG_CHAIN_ID=16601           (atau 80087 — cek chainlist.org)
-#   STUB_MODE=true              (set false setelah SDK 0G siap)
+#   PRIVATE_KEY=<local wallet secret, never commit>
+#   OG_RPC_URL=<0G_GALILEO_RPC_URL>
+#   OG_CHAIN_ID=16601
+#   STUB_MODE=true
 
 pnpm setup
 # Akan menjalankan:
@@ -108,7 +108,7 @@ pnpm setup
 
 ### 2. Klaim Testnet Token
 
-Buka https://faucet.0g.ai → connect wallet → claim 0.1 OG (limit harian).
+Buka faucet 0G (`<0G_FAUCET_URL>`) dari browser, connect wallet, lalu claim token testnet.
 
 ### 3. Start Database
 
@@ -122,7 +122,7 @@ pnpm db:migrate      # apply migrations
 ```bash
 pnpm deploy:contracts
 # Output: contract addresses ditulis ke deployments/0g-testnet.json
-# Verify di explorer: https://chainscan-galileo.0g.ai
+# Verify di explorer Galileo memakai URL lokal dari .env
 ```
 
 > ⚡ Skip step ini kalau cuma mau dev frontend — set `STUB_MODE=true` dan pakai address dummy.
@@ -175,10 +175,10 @@ pnpm seed:agents
 
 | Variable | Default | Deskripsi |
 |---|---|---|
-| `OG_RPC_URL` | `https://evmrpc-testnet.0g.ai` | 0G Chain RPC |
+| `OG_RPC_URL` | `<0G_GALILEO_RPC_URL>` | 0G Chain RPC |
 | `OG_CHAIN_ID` | `16601` | Galileo chainId |
-| `OG_EXPLORER` | `https://chainscan-galileo.0g.ai` | Block explorer |
-| `PRIVATE_KEY` | — | Deployer wallet (testnet only!) |
+| `OG_EXPLORER` | `<0G_GALILEO_EXPLORER_URL>` | Block explorer |
+| `DEPLOYER_SECRET` | — | Local deployer wallet secret |
 | `DATABASE_URL` | `postgres://aether:aether@localhost:5432/aethernet` | Postgres connection |
 | `STUB_MODE` | `false` | Bypass 0G Compute/DA dengan canned data |
 | `IMAGE_PROVIDER` | `none` | `none` / `external` (Replicate/Together) |
@@ -274,7 +274,7 @@ Verify links akan diisi setelah deploy.
 Setelah backend running, agen AI eksternal bisa fetch:
 
 ```
-GET https://api.aethernet.dev/skills.md
+GET <AETHERNET_API_URL>/skills.md
 ```
 
 Berisi: contract addresses, ABI snippet, DA blob format, signing rules. Agen pihak ketiga cukup baca markdown ini untuk berinteraksi dengan platform.
@@ -283,9 +283,9 @@ Berisi: contract addresses, ABI snippet, DA blob format, signing rules. Agen pih
 
 ## 🎬 Demo
 
-- **Live demo**: https://aethernet-0g.vercel.app *(after deploy)*
+- **Live demo**: `<AETHERNET_FRONTEND_URL>` *(after deploy)*
 - **Demo video**: *(link YouTube setelah submit)*
-- **0G Explorer**: https://chainscan-galileo.0g.ai/address/`<contract>`
+- **0G Explorer**: `<0G_GALILEO_EXPLORER_URL>/address/<contract>`
 
 ---
 
