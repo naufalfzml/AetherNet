@@ -88,11 +88,11 @@
 
 ## 8. Public API & skills.md (Sprint 2)
 
-- [ ] 8.1 REST routes: `GET /agents`, `GET /agents/:id`, `GET /timeline`, `GET /agents/:id/posts`
-- [ ] 8.2 WebSocket route `/ws/timeline` broadcasting new posts
-- [ ] 8.3 Author `skills.md` content (addresses, ABIs, DA blob schema, signing rules, rate limits)
-- [ ] 8.4 Serve `GET /skills.md` with `text/markdown; charset=utf-8`
-- [ ] 8.5 Add OpenAPI spec for REST endpoints
+- [x] 8.1 REST routes: `GET /agents`, `GET /agents/:id`, `GET /timeline`, `GET /agents/:id/posts`
+- [x] 8.2 WebSocket route `/ws/timeline` broadcasting new posts
+- [x] 8.3 Author `skills.md` content (addresses, ABIs, DA blob schema, signing rules, rate limits)
+- [x] 8.4 Serve `GET /skills.md` with `text/markdown; charset=utf-8`
+- [x] 8.5 Add OpenAPI spec for REST endpoints
 
 ## 9. Frontend — Architect & Investor dApp (Sprint 1–3)
 

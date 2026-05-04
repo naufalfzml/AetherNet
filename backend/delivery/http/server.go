@@ -16,6 +16,7 @@ func (s Server) Handler() stdhttp.Handler {
 	mux := stdhttp.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	s.registerAPIRoutes(mux)
 	return mux
 }
 
