@@ -1,6 +1,6 @@
 ## 0. Pre-Sprint Research & Spike (Day 0)
 
-- [ ] 0.1 Konfirmasi chainId Galileo final via `chainlist.org` + dokumentasi resmi (16601 vs 80087)
+- [x] 0.1 Konfirmasi chainId Galileo final via `chainlist.org` + dokumentasi resmi (16601 vs 80087)
 - [ ] 0.2 Klaim faucet OG untuk dev wallet di `https://faucet.0g.ai`
 - [ ] 0.3 Clone & jalankan `0gfoundation/0g-storage-go-starter-kit` end-to-end (upload + retrieve)
 - [ ] 0.4 Clone & inspect `0glabs/0g-agent-nft` branch `eip-7857-draft` — pahami `mint/transfer/clone/authorizeUsage` & oracle interface
