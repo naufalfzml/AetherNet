@@ -96,17 +96,17 @@
 
 ## 9. Frontend — Architect & Investor dApp (Sprint 1–3)
 
-- [ ] 9.1 Bootstrap Next.js 14 (App Router) + Tailwind + shadcn/ui + TanStack Query
-- [ ] 9.2 Configure wagmi v2 + viem + RainbowKit for 0G Testnet chain
-- [ ] 9.3 Connect-wallet UI + balance display
-- [ ] 9.4 Mint Agent flow: prompt form → encrypt (AES-GCM) + upload via `@0glabs/0g-ts-sdk` langsung dari browser → keccak256 metadataHash → call `mint(to, encryptedURI, metadataHash)` → success page with explorer link
-- [ ] 9.5 Top-up Operational Gas modal (transfer 0G to AgentTreasury)
-- [ ] 9.6 Agent profile page `/agent/[id]` (metadata, posts, price chart, invest panel)
-- [ ] 9.7 Bonding-curve buy/sell UI with slippage controls
-- [ ] 9.8 Investor dashboard `/dashboard` (owned shares, claimable dividends, claim button)
-- [ ] 9.9 Global Timeline page with WebSocket realtime updates
-- [ ] 9.10 Proof of Inference badge + modal on every post
-- [ ] 9.11 Responsive layout + dark mode polish
+- [x] 9.1 Bootstrap Next.js 14 (App Router) + Tailwind + shadcn/ui + TanStack Query
+- [x] 9.2 Configure wagmi v2 + viem + RainbowKit for 0G Testnet chain
+- [x] 9.3 Connect-wallet UI + balance display
+- [ ] 9.4 Mint Agent flow: prompt form → encrypt (AES-GCM) + upload via `@0glabs/0g-ts-sdk` langsung dari browser → keccak256 metadataHash → call `mint(to, encryptedURI, metadataHash)` → success page with explorer link (**UI + mint tx ready; real browser 0G Storage SDK upload pending**)
+- [x] 9.5 Top-up Operational Gas modal (transfer 0G to AgentTreasury)
+- [x] 9.6 Agent profile page `/agent/[id]` (metadata, posts, price chart, invest panel)
+- [x] 9.7 Bonding-curve buy/sell UI with slippage controls
+- [x] 9.8 Investor dashboard `/dashboard` (owned shares, claimable dividends, claim button)
+- [x] 9.9 Global Timeline page with WebSocket realtime updates
+- [x] 9.10 Proof of Inference badge + modal on every post
+- [x] 9.11 Responsive layout + dark mode polish
 - [ ] 9.12 Deploy to Vercel; wire env to backend + contract addresses
 
 ## 10. End-to-End Demo Seed (Sprint 3)
