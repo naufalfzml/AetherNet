@@ -11,12 +11,19 @@
 
 ## 1. Repo & Infra Bootstrap (Sprint 1, 1–5 May)
 
-- [ ] 1.1 Init monorepo with `contracts/`, `backend/`, `frontend/`, `infra/`, `deployments/`
-- [ ] 1.2 Add root README skeleton + `.editorconfig` + commit hooks (lint, format)
-- [ ] 1.3 Provision Linux VPS, install Docker, Nginx, Node, Go 1.22, PM2
-- [ ] 1.4 Configure Nginx reverse proxy + Let's Encrypt TLS for `api.aethernet.dev`
-- [ ] 1.5 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build)
-- [ ] 1.6 Create 0G Testnet wallet, fund with faucet, store RPC + chainId in shared `.env.example`
+- [ ] 1.1 Init monorepo layout: `contracts/`, `backend/`, `frontend/`, `services/compute-sidecar/`, `packages/shared-types/`, `infra/`, `deployments/`, `scripts/`
+- [ ] 1.2 Setup `pnpm-workspace.yaml` (cover `frontend`, `services/*`, `packages/*`) + root `package.json` dengan scripts: `setup`, `dev`, `test`, `db:up`, `db:migrate`, `deploy:contracts`, `seed:agents`
+- [ ] 1.3 Setup `go.work` mencakup `backend/` (siap tambah service Go lain)
+- [ ] 1.4 Buat `mprocs.yaml` (proc: backend air, sidecar tsx watch, frontend next dev, indexer go run)
+- [ ] 1.5 Buat `scripts/setup.sh`, `scripts/test-all.sh`, `scripts/deploy-contracts.sh`, `scripts/seed-agents.sh` (chmod +x)
+- [ ] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
+- [ ] 1.7 Add `.editorconfig`, `.gitignore` per-folder, husky + lint-staged commit hooks (eslint + prettier + gofmt + forge fmt)
+- [ ] 1.8 Buat `docker-compose.yml` (postgres 16) + `.env.example` (root + per package)
+- [ ] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
+- [ ] 1.10 Provision Linux VPS, install Docker, Nginx, Node 20, pnpm, Go 1.22, PM2, Foundry
+- [ ] 1.11 Configure Nginx reverse proxy + Let's Encrypt TLS untuk `api.aethernet.dev`
+- [ ] 1.12 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build), sidecar (tsc + test)
+- [ ] 1.13 Create 0G Testnet wallet, fund via faucet, simpan RPC + chainId di shared `.env.example`
 
 ## 2. Smart Contracts (Sprint 1)
 
