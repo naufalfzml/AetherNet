@@ -16,8 +16,8 @@
 - [x] 1.3 Setup `go.work` mencakup `backend/` (siap tambah service Go lain)
 - [x] 1.4 Buat `mprocs.yaml` (proc: backend air, sidecar tsx watch, frontend next dev, indexer go run)
 - [x] 1.5 Buat `scripts/setup.sh`, `scripts/test-all.sh`, `scripts/deploy-contracts.sh`, `scripts/seed-agents.sh` (chmod +x)
-- [ ] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
-- [ ] 1.7 Add `.editorconfig`, `.gitignore` per-folder, husky + lint-staged commit hooks (eslint + prettier + gofmt + forge fmt)
+- [x] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
+- [x] 1.7 Add `.editorconfig`, `.gitignore` per-folder, husky + lint-staged commit hooks (eslint + prettier + gofmt + forge fmt)
 - [ ] 1.8 Buat `docker-compose.yml` (postgres 16) + `.env.example` (root + per package)
 - [ ] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
 - [ ] 1.10 Provision Linux VPS, install Docker, Nginx, Node 20, pnpm, Go 1.22, PM2, Foundry

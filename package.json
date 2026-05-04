@@ -4,12 +4,25 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
+    "prepare": "husky",
     "setup": "bash scripts/setup.sh",
     "dev": "mprocs",
     "test": "bash scripts/test-all.sh",
+    "lint-staged": "lint-staged",
+    "format": "prettier --write \"**/*.{md,json,yaml,yml,css,ts,tsx}\"",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "migrate -path backend/migrations -database \"$DATABASE_URL\" up",
     "deploy:contracts": "bash scripts/deploy-contracts.sh",
     "seed:agents": "bash scripts/seed-agents.sh"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.5.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css,md,yaml,yml}": "prettier --write",
+    "*.go": "gofmt -w",
+    "contracts/**/*.sol": "forge fmt"
   }
 }

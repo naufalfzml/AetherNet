@@ -1,0 +1,5 @@
+bin/
+tmp/
+.air.toml
+*.test
+*.out
