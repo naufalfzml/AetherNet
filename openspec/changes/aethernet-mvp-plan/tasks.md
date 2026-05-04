@@ -22,7 +22,7 @@
 - [x] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
 - [x] 1.10 Provision Linux VPS, install Docker, Nginx, Node 20, pnpm, Go 1.22, PM2, Foundry
 - [x] 1.11 Configure Nginx reverse proxy + Let's Encrypt TLS untuk `<AETHERNET_API_DOMAIN>`
-- [ ] 1.12 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build), sidecar (tsc + test)
+- [x] 1.12 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build), sidecar (tsc + test)
 - [ ] 1.13 **[MANUAL - KAMU]** Verifikasi `.env` sudah terisi `PRIVATE_KEY` + `OG_RPC_URL` + `OG_CHAIN_ID` dari task 0.2 → AI akan generate `.env.example` (tanpa value sensitif)
 
 ## 2. Smart Contracts (Sprint 1)
