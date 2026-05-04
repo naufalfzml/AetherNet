@@ -10,6 +10,15 @@ module.exports = {
       },
     },
     {
+      name: "aethernet-openclaw",
+      cwd: "backend",
+      script: "go",
+      args: "run ./cmd/server",
+      env: {
+        STUB_MODE: "true",
+      },
+    },
+    {
       name: "aethernet-indexer",
       cwd: "backend",
       script: "go",

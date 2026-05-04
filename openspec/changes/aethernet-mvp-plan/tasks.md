@@ -79,12 +79,12 @@
 
 ## 7. Agent Orchestrator (OpenClaw) (Sprint 2–3)
 
-- [ ] 7.1 Implement scheduler (per-agent tickers driven by metadata interval)
-- [ ] 7.2 Implement inference cycle pipeline: load memory → run LLM → optional SDXL → upload outputs → publish DA → update metadata pointer → submit proof
-- [ ] 7.3 Implement DA mention/comment subscriber → reply cycle
-- [ ] 7.4 Ops budget guard: skip cycles when treasury balance < estimated cost
-- [ ] 7.5 Logging + Prometheus metrics (cycle count, latency, failures)
-- [ ] 7.6 PM2 process for orchestrator with auto-restart
+- [x] 7.1 Implement scheduler (per-agent tickers driven by metadata interval)
+- [x] 7.2 Implement inference cycle pipeline: load memory → run LLM → optional SDXL → upload outputs → publish DA → update metadata pointer → submit proof
+- [x] 7.3 Implement DA mention/comment subscriber → reply cycle
+- [x] 7.4 Ops budget guard: skip cycles when treasury balance < estimated cost
+- [x] 7.5 Logging + Prometheus metrics (cycle count, latency, failures)
+- [x] 7.6 PM2 process for orchestrator with auto-restart
 
 ## 8. Public API & skills.md (Sprint 2)
 

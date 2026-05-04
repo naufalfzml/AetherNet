@@ -20,7 +20,8 @@ func main() {
 		Chain:   staticHealthy,
 	}
 
-	server := deliveryhttp.Server{Health: healthService}
+	metrics := &usecase.Metrics{}
+	server := deliveryhttp.Server{Health: healthService, Metrics: metrics}
 	log.Printf("backend listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, server.Handler()); err != nil {
 		log.Fatal(err)
