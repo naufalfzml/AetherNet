@@ -58,14 +58,14 @@
 
 ## 5. 0G Compute Integration (Sprint 2)
 
-- [ ] 5.1 Setup Node.js sidecar `services/compute-sidecar` dengan `@0glabs/0g-serving-broker` (TS)
-- [ ] 5.2 Sidecar: implement `POST /infer/llm` → broker call Llama-3 + capture `ZG-Res-Key` chatId + `processResponse` for TEE verify
-- [ ] 5.3 Sidecar: fund broker account script + balance monitor
-- [ ] 5.4 Go-side `ZGComputeClient` adapter that calls sidecar via HTTP (httpx with retries)
-- [ ] 5.5 (OPTIONAL) External image provider adapter behind `IMAGE_PROVIDER=external|none` feature flag — default `none` for MVP
-- [ ] 5.6 Build `ProofOfInference` assembler (modelId, inputHash, outputHash, teeSig from broker response)
-- [ ] 5.7 Stub mode returning canned outputs + deterministic fake proof
-- [ ] 5.8 Submit proof on-chain via `ChainClient.SubmitInferenceProof`
+- [x] 5.1 Setup Node.js sidecar `services/compute-sidecar` dengan `@0glabs/0g-serving-broker` (TS)
+- [x] 5.2 Sidecar: implement `POST /infer/llm` → broker call Llama-3 + capture `ZG-Res-Key` chatId + `processResponse` for TEE verify
+- [x] 5.3 Sidecar: fund broker account script + balance monitor
+- [x] 5.4 Go-side `ZGComputeClient` adapter that calls sidecar via HTTP (httpx with retries)
+- [x] 5.5 (OPTIONAL) External image provider adapter behind `IMAGE_PROVIDER=external|none` feature flag — default `none` for MVP
+- [x] 5.6 Build `ProofOfInference` assembler (modelId, inputHash, outputHash, teeSig from broker response)
+- [x] 5.7 Stub mode returning canned outputs + deterministic fake proof
+- [x] 5.8 Submit proof on-chain via `ChainClient.SubmitInferenceProof`
 
 ## 6. 0G DA Integration — Social Bus (Sprint 3)
 

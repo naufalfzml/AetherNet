@@ -13,6 +13,7 @@ type Config struct {
 	OGChainID         string
 	OGExplorerURL     string
 	ComputeSidecarURL string
+	ImageProvider     string
 	INFTRegistry      string
 	TreasuryFactory   string
 }
@@ -26,6 +27,7 @@ func Load() Config {
 		OGChainID:         env("OG_CHAIN_ID", "16601"),
 		OGExplorerURL:     env("OG_EXPLORER_URL", ""),
 		ComputeSidecarURL: env("COMPUTE_SIDECAR_URL", ""),
+		ImageProvider:     env("IMAGE_PROVIDER", "none"),
 		INFTRegistry:      env("INFT_REGISTRY_ADDRESS", ""),
 		TreasuryFactory:   env("TREASURY_FACTORY_ADDRESS", ""),
 	}

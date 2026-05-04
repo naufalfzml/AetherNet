@@ -1,0 +1,22 @@
+{
+  "name": "@aethernet/compute-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js",
+    "broker:balance": "tsx scripts/broker-balance.ts"
+  },
+  "dependencies": {
+    "@0glabs/0g-serving-broker": "^0.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
