@@ -13,7 +13,7 @@
 
 - [x] 1.1 Init monorepo layout: `contracts/`, `backend/`, `frontend/`, `services/compute-sidecar/`, `packages/shared-types/`, `infra/`, `deployments/`, `scripts/`
 - [x] 1.2 Setup `pnpm-workspace.yaml` (cover `frontend`, `services/*`, `packages/*`) + root `package.json` dengan scripts: `setup`, `dev`, `test`, `db:up`, `db:migrate`, `deploy:contracts`, `seed:agents`
-- [ ] 1.3 Setup `go.work` mencakup `backend/` (siap tambah service Go lain)
+- [x] 1.3 Setup `go.work` mencakup `backend/` (siap tambah service Go lain)
 - [ ] 1.4 Buat `mprocs.yaml` (proc: backend air, sidecar tsx watch, frontend next dev, indexer go run)
 - [ ] 1.5 Buat `scripts/setup.sh`, `scripts/test-all.sh`, `scripts/deploy-contracts.sh`, `scripts/seed-agents.sh` (chmod +x)
 - [ ] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
