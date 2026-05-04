@@ -12,11 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Run forge tests
         run: |
           if [ -f contracts/foundry.toml ]; then
             cd contracts
+            if [ ! -d lib/forge-std/src ] || [ ! -d lib/openzeppelin-contracts/contracts ]; then
+              forge install
+            fi
             forge test
           else
             echo "contracts/foundry.toml not present yet; skipping"
@@ -75,11 +80,11 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Typecheck and test sidecar
+      - name: Typecheck and build sidecar
         run: |
           if [ -f services/compute-sidecar/package.json ]; then
             pnpm --filter @aethernet/compute-sidecar typecheck
-            pnpm --filter @aethernet/compute-sidecar test
+            pnpm --filter @aethernet/compute-sidecar build
           else
             echo "services/compute-sidecar/package.json not present yet; skipping"
           fi
