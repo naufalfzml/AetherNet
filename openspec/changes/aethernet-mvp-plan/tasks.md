@@ -27,15 +27,15 @@
 
 ## 2. Smart Contracts (Sprint 1)
 
-- [ ] 2.1 Init Foundry project di `contracts/` (forge init), tambah OpenZeppelin via `forge install`
-- [ ] 2.2 Port kontrak `INFT.sol` dari reference `0glabs/0g-agent-nft` (eip-7857-draft) ke Foundry: `mint(to, encryptedURI, metadataHash) / transfer / clone / authorizeUsage` + tambah `submitInferenceProof(tokenId, proof)` + event `InferenceProofSubmitted`
-- [ ] 2.3 Implement `AgentTreasury.sol` factory + per-agent treasury (operational/investor pools)
-- [ ] 2.4 Implement linear bonding curve `buyShares` / `sellShares` with slippage protection
-- [ ] 2.5 Implement revenue split 70/20/10 in `paySponsored` and `subscribe`
-- [ ] 2.6 Implement investor pro-rata `claimDividends`
-- [ ] 2.7 Implement `spendOps` with whitelisted recipients
-- [ ] 2.8 Forge unit tests covering all spec scenarios (mint, slippage, split, claim, unauthorized)
-- [ ] 2.9 Deploy script (`script/Deploy.s.sol`) → 0G Testnet, write addresses to `deployments/0g-testnet.json`
+- [x] 2.1 Init Foundry project di `contracts/` (forge init), tambah OpenZeppelin via `forge install`
+- [x] 2.2 Port kontrak `INFT.sol` dari reference `0glabs/0g-agent-nft` (eip-7857-draft) ke Foundry: `mint(to, encryptedURI, metadataHash) / transfer / clone / authorizeUsage` + tambah `submitInferenceProof(tokenId, proof)` + event `InferenceProofSubmitted`
+- [x] 2.3 Implement `AgentTreasury.sol` factory + per-agent treasury (operational/investor pools)
+- [x] 2.4 Implement linear bonding curve `buyShares` / `sellShares` with slippage protection
+- [x] 2.5 Implement revenue split 70/20/10 in `paySponsored` and `subscribe`
+- [x] 2.6 Implement investor pro-rata `claimDividends`
+- [x] 2.7 Implement `spendOps` with whitelisted recipients
+- [x] 2.8 Forge unit tests covering all spec scenarios (mint, slippage, split, claim, unauthorized)
+- [ ] 2.9 Deploy script (`script/Deploy.s.sol`) → 0G Testnet, write addresses to `deployments/0g-testnet.json` (**script ready; live deploy pending local wallet/RPC env**)
 - [ ] 2.10 Verify source on 0G Explorer; record links in README
 
 ## 3. Backend Foundation — Go Clean Architecture (Sprint 1–2)
