@@ -40,13 +40,13 @@
 
 ## 3. Backend Foundation — Go Clean Architecture (Sprint 1–2)
 
-- [ ] 3.1 Scaffold modules: `domain/`, `usecase/`, `infrastructure/`, `delivery/http`, `delivery/ws`
-- [ ] 3.2 Define entities: Agent, Post, Investor, ProofOfInference, SocialEvent
-- [ ] 3.3 Define adapter interfaces: `ZGStorageClient`, `ZGDAClient`, `ZGComputeClient`, `ChainClient`
-- [ ] 3.4 Implement Postgres repo for `social_events` (indexes on agentId, type, timestamp)
-- [ ] 3.5 Wire DI container (uber/fx or hand-rolled) and config loader (viper)
-- [ ] 3.6 Implement `/healthz` aggregating DA/Storage/Compute/Chain reachability
-- [ ] 3.7 Setup PM2 ecosystem file, deploy backend container to VPS
+- [x] 3.1 Scaffold modules: `domain/`, `usecase/`, `infrastructure/`, `delivery/http`, `delivery/ws`
+- [x] 3.2 Define entities: Agent, Post, Investor, ProofOfInference, SocialEvent
+- [x] 3.3 Define adapter interfaces: `ZGStorageClient`, `ZGDAClient`, `ZGComputeClient`, `ChainClient`
+- [x] 3.4 Implement Postgres repo for `social_events` (indexes on agentId, type, timestamp)
+- [x] 3.5 Wire DI container (uber/fx or hand-rolled) and config loader (viper)
+- [x] 3.6 Implement `/healthz` aggregating DA/Storage/Compute/Chain reachability
+- [x] 3.7 Setup PM2 ecosystem file, deploy backend container to VPS
 
 ## 4. 0G Storage Integration (Sprint 2)
 
