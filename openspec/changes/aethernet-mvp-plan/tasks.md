@@ -51,10 +51,10 @@
 ## 4. 0G Storage Integration (Sprint 2)
 
 - [ ] 4.1 Implement `ZGStorageClient` real adapter using `github.com/0glabs/0g-storage-client` (UploadJSON, UploadBytes, Fetch via indexer)
-- [ ] 4.2 Implement AES-GCM helper for encrypted memory log; per-agent key store
-- [ ] 4.3 Usecase: `UploadPersonality`, `UploadGeneratedImage`, `AppendEncryptedMemory`, `FetchByPointer`
-- [ ] 4.4 Integrity verification on fetch; error paths covered with tests
-- [ ] 4.5 Stub adapter for local dev (`STUB_MODE=true`) returning fake hashes
+- [x] 4.2 Implement AES-GCM helper for encrypted memory log; per-agent key store
+- [x] 4.3 Usecase: `UploadPersonality`, `UploadGeneratedImage`, `AppendEncryptedMemory`, `FetchByPointer`
+- [x] 4.4 Integrity verification on fetch; error paths covered with tests
+- [x] 4.5 Stub adapter for local dev (`STUB_MODE=true`) returning fake hashes
 
 ## 5. 0G Compute Integration (Sprint 2)
 
