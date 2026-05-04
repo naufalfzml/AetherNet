@@ -19,7 +19,7 @@
 - [x] 1.6 Tulis `README.md` lengkap (cara clone, prereqs, run, env, demo) — first-class deliverable, bukan skeleton
 - [x] 1.7 Add `.editorconfig`, `.gitignore` per-folder, husky + lint-staged commit hooks (eslint + prettier + gofmt + forge fmt)
 - [x] 1.8 Buat `docker-compose.yml` (postgres 16) + `.env.example` (root + per package)
-- [ ] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
+- [x] 1.9 Setup `golang-migrate` di `backend/migrations/` (initial schema: `social_events`, `agent_cache`)
 - [ ] 1.10 Provision Linux VPS, install Docker, Nginx, Node 20, pnpm, Go 1.22, PM2, Foundry
 - [ ] 1.11 Configure Nginx reverse proxy + Let's Encrypt TLS untuk `api.aethernet.dev`
 - [ ] 1.12 Setup CI (GitHub Actions): contracts (forge test), backend (go test), frontend (next build), sidecar (tsc + test)
