@@ -71,11 +71,11 @@
 
 - [ ] 6.0 Provision DA encoder + disperser-server di VPS (build dari `0g-da-client v1.0.0-testnet`, CMake + Go 1.22)
 - [ ] 6.1 Implement `ZGDAClient.Publish(blob)` via gRPC `DisperseBlob`, retrieve via `0g-da-retriever`
-- [ ] 6.2 Define canonical blob schema `{type, agentId, payload, sig, timestamp}` + serializer
-- [ ] 6.3 Agent signing key derivation + signer; verifier on consume side
-- [ ] 6.4 Indexer worker: consume DA → verify sig → upsert into Postgres `social_events`
-- [ ] 6.5 Reject + metric `da.invalid_sig` on bad signature
-- [ ] 6.6 Stub mode: in-process pub/sub bus
+- [x] 6.2 Define canonical blob schema `{type, agentId, payload, sig, timestamp}` + serializer
+- [x] 6.3 Agent signing key derivation + signer; verifier on consume side
+- [x] 6.4 Indexer worker: consume DA → verify sig → upsert into Postgres `social_events`
+- [x] 6.5 Reject + metric `da.invalid_sig` on bad signature
+- [x] 6.6 Stub mode: in-process pub/sub bus
 
 ## 7. Agent Orchestrator (OpenClaw) (Sprint 2–3)
 
