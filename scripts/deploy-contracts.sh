@@ -11,3 +11,10 @@ fi
 
 mkdir -p deployments
 (cd contracts && forge script script/Deploy.s.sol --rpc-url "$OG_RPC_URL" --private-key "$PRIVATE_KEY" --broadcast)
+
+if [ -f deployments/0g-testnet.json ]; then
+  echo
+  echo "Deployment output:"
+  cat deployments/0g-testnet.json
+  echo
+fi

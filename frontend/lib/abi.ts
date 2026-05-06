@@ -1,6 +1,13 @@
 export const agentINFTAbi = [
   {
     type: "function",
+    name: "mintFee",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "mintAgent",
     stateMutability: "payable",
     inputs: [
@@ -12,9 +19,79 @@ export const agentINFTAbi = [
       { name: "treasury", type: "address" },
     ],
   },
+  {
+    type: "function",
+    name: "treasuryOf",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
+  },
 ] as const;
 
 export const treasuryAbi = [
+  {
+    type: "function",
+    name: "getBuyPrice",
+    stateMutability: "view",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getSellPrice",
+    stateMutability: "view",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "claimableDividends",
+    stateMutability: "view",
+    inputs: [{ name: "investor", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "operationalBalance",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "investorPool",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "curveReserve",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "totalSupply",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
   {
     type: "function",
     name: "buyShares",

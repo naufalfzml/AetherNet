@@ -5,6 +5,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AgentTreasuryFactory} from "./AgentTreasuryFactory.sol";
+import {AgentTreasury} from "./AgentTreasury.sol";
 
 contract AgentINFT is ERC721, Ownable, ReentrancyGuard {
     error InsufficientMintFee();
@@ -14,9 +15,8 @@ contract AgentINFT is ERC721, Ownable, ReentrancyGuard {
     event AgentMinted(uint256 indexed tokenId, address indexed owner, string metadataPointer, address treasury);
     event MetadataUpdated(uint256 indexed tokenId, string oldPointer, string newPointer);
     event InferenceProofSubmitted(uint256 indexed tokenId, bytes32 proofHash, bytes proof);
-    event UsageAuthorized(uint256 indexed tokenId, address indexed user, bool allowed);
-    event AgentCloned(uint256 indexed sourceTokenId, uint256 indexed cloneTokenId, address indexed owner);
     event OrchestratorUpdated(address indexed orchestrator);
+    event MintFeesWithdrawn(address indexed recipient, uint256 amount);
 
     struct AgentMetadata {
         string pointer;
@@ -32,7 +32,6 @@ contract AgentINFT is ERC721, Ownable, ReentrancyGuard {
 
     mapping(uint256 => AgentMetadata) public agentMetadata;
     mapping(uint256 => bytes32) public latestProof;
-    mapping(uint256 => mapping(address => bool)) public usageAuthorized;
 
     constructor(uint256 mintFee_, address orchestrator_, AgentTreasuryFactory treasuryFactory_)
         ERC721("AetherNet Agent iNFT", "AINFT")
@@ -61,8 +60,16 @@ contract AgentINFT is ERC721, Ownable, ReentrancyGuard {
         emit AgentMinted(tokenId, msg.sender, initialMetadataPointer, treasury);
     }
 
-    function setOrchestrator(address nextOrchestrator) external onlyOwner {
+    function setOrchestrator(address nextOrchestrator) external onlyOwner nonReentrant {
         orchestrator = nextOrchestrator;
+
+        for (uint256 tokenId = 1; tokenId < nextTokenId; tokenId++) {
+            address treasury = agentMetadata[tokenId].treasury;
+            if (treasury != address(0)) {
+                AgentTreasury(payable(treasury)).syncOrchestrator(nextOrchestrator);
+            }
+        }
+
         emit OrchestratorUpdated(nextOrchestrator);
     }
 
@@ -84,33 +91,10 @@ contract AgentINFT is ERC721, Ownable, ReentrancyGuard {
         emit InferenceProofSubmitted(tokenId, proofHash, proof);
     }
 
-    function authorizeUsage(uint256 tokenId, address user, bool allowed) external {
-        _requireExisting(tokenId);
-        if (msg.sender != ownerOf(tokenId)) revert Unauthorized();
-
-        usageAuthorized[tokenId][user] = allowed;
-        emit UsageAuthorized(tokenId, user, allowed);
-    }
-
-    function clone(uint256 sourceTokenId, address to)
-        external
-        payable
-        nonReentrant
-        returns (uint256 cloneTokenId, address treasury)
-    {
-        _requireExisting(sourceTokenId);
-        if (msg.sender != ownerOf(sourceTokenId) && !usageAuthorized[sourceTokenId][msg.sender]) revert Unauthorized();
-        if (msg.value < mintFee) revert InsufficientMintFee();
-
-        AgentMetadata memory source = agentMetadata[sourceTokenId];
-        cloneTokenId = nextTokenId++;
-        _safeMint(to, cloneTokenId);
-        treasury = treasuryFactory.createTreasury(cloneTokenId, to, orchestrator);
-        agentMetadata[cloneTokenId] =
-            AgentMetadata({pointer: source.pointer, promptHash: source.promptHash, treasury: treasury});
-
-        emit AgentCloned(sourceTokenId, cloneTokenId, to);
-        emit AgentMinted(cloneTokenId, to, source.pointer, treasury);
+    function withdrawMintFees(address payable recipient, uint256 amount) external onlyOwner nonReentrant {
+        (bool ok,) = recipient.call{value: amount}("");
+        require(ok, "withdraw failed");
+        emit MintFeesWithdrawn(recipient, amount);
     }
 
     function metadataPointer(uint256 tokenId) external view returns (string memory) {

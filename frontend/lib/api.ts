@@ -14,6 +14,7 @@ export type Agent = {
   treasuryAddress: string;
   metadataPointer: string;
   personalitySummary: string;
+  updatedAt?: string;
 };
 
 export type Post = {

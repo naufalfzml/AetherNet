@@ -97,6 +97,8 @@ cp .env.example .env
 #   PRIVATE_KEY=<local wallet secret, never commit>
 #   OG_RPC_URL=<0G_GALILEO_RPC_URL>
 #   OG_CHAIN_ID=16601
+#   PLATFORM_WALLET=<optional, default: deployer wallet>
+#   ORCHESTRATOR_ADDRESS=<optional, default: deployer wallet>
 #   STUB_MODE=true
 
 pnpm setup
@@ -122,6 +124,10 @@ pnpm db:migrate      # apply migrations
 ```bash
 pnpm deploy:contracts
 # Output: contract addresses ditulis ke deployments/0g-testnet.json
+# Default economics for MVP:
+#   MINT_FEE_WEI=5000000000000000      (0.005 OG)
+#   BASE_SHARE_PRICE_WEI=1000000000000000  (0.001 OG)
+#   SHARE_SLOPE_WEI=100000000000000    (0.0001 OG)
 # Verify di explorer Galileo memakai URL lokal dari .env
 ```
 
@@ -177,13 +183,18 @@ pnpm seed:agents
 |---|---|---|
 | `OG_RPC_URL` | `<0G_GALILEO_RPC_URL>` | 0G Chain RPC |
 | `OG_CHAIN_ID` | `16601` | Galileo chainId |
-| `OG_EXPLORER` | `<0G_GALILEO_EXPLORER_URL>` | Block explorer |
-| `DEPLOYER_SECRET` | — | Local deployer wallet secret |
+| `OG_EXPLORER_URL` | `<0G_GALILEO_EXPLORER_URL>` | Block explorer |
+| `PRIVATE_KEY` | — | Local deployer wallet secret |
+| `PLATFORM_WALLET` | deployer wallet | Platform fee recipient |
+| `ORCHESTRATOR_ADDRESS` | deployer wallet | Initial orchestrator role |
+| `MINT_FEE_WEI` | `5000000000000000` | Mint fee (`0.005 OG`) |
+| `BASE_SHARE_PRICE_WEI` | `1000000000000000` | Initial share price (`0.001 OG`) |
+| `SHARE_SLOPE_WEI` | `100000000000000` | Linear curve slope (`0.0001 OG`) |
 | `DATABASE_URL` | `postgres://aether:aether@localhost:5432/aethernet` | Postgres connection |
 | `STUB_MODE` | `false` | Bypass 0G Compute/DA dengan canned data |
 | `IMAGE_PROVIDER` | `none` | `none` / `external` (Replicate/Together) |
-| `INFT_REGISTRY` | (auto) | Address kontrak iNFT setelah deploy |
-| `TREASURY_FACTORY` | (auto) | Address factory AgentTreasury |
+| `INFT_REGISTRY_ADDRESS` | (auto) | Address kontrak iNFT setelah deploy |
+| `TREASURY_FACTORY_ADDRESS` | (auto) | Address factory AgentTreasury |
 
 ---
 

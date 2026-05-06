@@ -8,8 +8,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
     error SlippageExceeded();
     error InsufficientPayment();
+    error InsufficientCurveReserve();
     error InsufficientOperationalBalance();
     error RecipientNotWhitelisted();
+    error SharesNonTransferable();
     error Unauthorized();
 
     event SharesBought(address indexed buyer, uint256 amount, uint256 paid);
@@ -30,8 +32,10 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
     uint256 public immutable basePrice;
     uint256 public immutable slope;
     address public immutable platformWallet;
+    address public immutable registry;
 
     address public orchestrator;
+    uint256 public curveReserve;
     uint256 public operationalBalance;
     uint256 public investorPool;
     uint256 public accDividendPerShare;
@@ -48,12 +52,14 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
         uint256 tokenId_,
         address agentOwner,
         address platformWallet_,
+        address registry_,
         address orchestrator_,
         uint256 basePrice_,
         uint256 slope_
     ) ERC20("AetherNet Agent Share", "AAS") Ownable(agentOwner) {
         tokenId = tokenId_;
         platformWallet = platformWallet_;
+        registry = registry_;
         orchestrator = orchestrator_;
         basePrice = basePrice_;
         slope = slope_;
@@ -68,6 +74,12 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
     }
 
     function setOrchestrator(address nextOrchestrator) external onlyOwner {
+        orchestrator = nextOrchestrator;
+        emit OrchestratorUpdated(nextOrchestrator);
+    }
+
+    function syncOrchestrator(address nextOrchestrator) external {
+        if (msg.sender != registry) revert Unauthorized();
         orchestrator = nextOrchestrator;
         emit OrchestratorUpdated(nextOrchestrator);
     }
@@ -92,8 +104,10 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
         if (price > maxPrice) revert SlippageExceeded();
         if (msg.value < price) revert InsufficientPayment();
 
+        _claimDividends(msg.sender);
         _mint(msg.sender, amount);
         dividendDebt[msg.sender] = _scaledBalance(msg.sender);
+        curveReserve += price;
 
         uint256 refund = msg.value - price;
         if (refund > 0) {
@@ -109,8 +123,10 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
 
         uint256 price = getSellPrice(amount);
         if (price < minPrice) revert SlippageExceeded();
+        if (price > curveReserve) revert InsufficientCurveReserve();
         _burn(msg.sender, amount);
         dividendDebt[msg.sender] = _scaledBalance(msg.sender);
+        curveReserve -= price;
 
         (bool ok,) = msg.sender.call{value: price}("");
         require(ok, "payout failed");
@@ -118,11 +134,11 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
         emit SharesSold(msg.sender, amount, price);
     }
 
-    function paySponsored(string calldata) external payable {
+    function paySponsored(string calldata) external payable nonReentrant {
         _distributeRevenue(msg.value);
     }
 
-    function subscribe() external payable {
+    function subscribe() external payable nonReentrant {
         _distributeRevenue(msg.value);
     }
 
@@ -163,7 +179,7 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
         emit OpsSpend(recipient, amount, reason);
     }
 
-    function _distributeRevenue(uint256 amount) internal nonReentrant {
+    function _distributeRevenue(uint256 amount) internal {
         uint256 opsAmount = (amount * OPERATIONAL_BPS) / BPS_DENOMINATOR;
         uint256 investorAmount = (amount * INVESTOR_BPS) / BPS_DENOMINATOR;
         uint256 platformAmount = amount - opsAmount - investorAmount;
@@ -191,5 +207,10 @@ contract AgentTreasury is ERC20, Ownable, ReentrancyGuard {
 
     function _scaledBalance(address investor) internal view returns (uint256) {
         return (balanceOf(investor) * accDividendPerShare) / ACC_PRECISION;
+    }
+
+    function _update(address from, address to, uint256 value) internal override {
+        if (from != address(0) && to != address(0)) revert SharesNonTransferable();
+        super._update(from, to, value);
     }
 }

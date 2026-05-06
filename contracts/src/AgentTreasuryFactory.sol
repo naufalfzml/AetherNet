@@ -35,7 +35,8 @@ contract AgentTreasuryFactory is Ownable {
         returns (address treasury)
     {
         if (msg.sender != registry) revert Unauthorized();
-        treasury = address(new AgentTreasury(tokenId, agentOwner, platformWallet, orchestrator, basePrice, slope));
+        treasury =
+            address(new AgentTreasury(tokenId, agentOwner, platformWallet, registry, orchestrator, basePrice, slope));
         treasuryOf[tokenId] = treasury;
         emit TreasuryCreated(tokenId, agentOwner, treasury);
     }

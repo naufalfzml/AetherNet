@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	stdhttp "net/http"
 
+	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
 	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
 type Server struct {
 	Health  usecase.HealthService
 	Metrics *usecase.Metrics
+	Config  config.Config
 }
 
 func (s Server) Handler() stdhttp.Handler {
 	mux := stdhttp.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.registerAPIRoutes(mux)
 	return mux

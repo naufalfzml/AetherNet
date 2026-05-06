@@ -15,11 +15,12 @@ contract AgentContractsTest is Test {
     address internal brand = address(0xB4A);
     address internal platform = address(0xC0FFEE);
     address internal orchestrator = address(0xDAD);
+    address internal nextOrchestrator = address(0xD0D);
     address payable internal computeProvider = payable(address(0xFEE));
 
-    uint256 internal constant MINT_FEE = 0.1 ether;
-    uint256 internal constant BASE_PRICE = 0.01 ether;
-    uint256 internal constant SLOPE = 0.001 ether;
+    uint256 internal constant MINT_FEE = 0.005 ether;
+    uint256 internal constant BASE_PRICE = 0.001 ether;
+    uint256 internal constant SLOPE = 0.0001 ether;
 
     function setUp() public {
         factory = new AgentTreasuryFactory(platform, BASE_PRICE, SLOPE);
@@ -71,41 +72,47 @@ contract AgentContractsTest is Test {
         assertEq(inft.latestProof(tokenId), keccak256(proof));
     }
 
-    function testCloneRequiresOwnerOrAuthorizedUsage() public {
+    function testSetOrchestratorSyncsTreasuries() public {
         vm.prank(architect);
-        (uint256 tokenId,) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
+        (, address treasury) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
 
-        vm.prank(investor);
-        vm.expectRevert(AgentINFT.Unauthorized.selector);
-        inft.clone{value: MINT_FEE}(tokenId, investor);
-
-        vm.prank(architect);
-        inft.authorizeUsage(tokenId, investor, true);
-
-        vm.prank(investor);
-        (uint256 cloneId,) = inft.clone{value: MINT_FEE}(tokenId, investor);
-        assertEq(inft.ownerOf(cloneId), investor);
-        assertEq(inft.metadataPointer(cloneId), "zg://agent-1");
+        inft.setOrchestrator(nextOrchestrator);
+        assertEq(inft.orchestrator(), nextOrchestrator);
+        assertEq(AgentTreasury(payable(treasury)).orchestrator(), nextOrchestrator);
     }
 
     function testBondingCurveBuySellAndSlippage() public {
         AgentTreasury treasury = _mintTreasury();
 
-        assertEq(treasury.getBuyPrice(3), 0.033 ether);
+        assertEq(treasury.getBuyPrice(3), 0.0033 ether);
 
         vm.prank(investor);
         vm.expectRevert(AgentTreasury.SlippageExceeded.selector);
-        treasury.buyShares{value: 0.033 ether}(3, 0.032 ether);
+        treasury.buyShares{value: 0.0033 ether}(3, 0.0032 ether);
 
         vm.prank(investor);
-        treasury.buyShares{value: 0.033 ether}(3, 0.033 ether);
+        treasury.buyShares{value: 0.0033 ether}(3, 0.0033 ether);
         assertEq(treasury.balanceOf(investor), 3);
         assertEq(treasury.totalSupply(), 3);
-        assertEq(treasury.getSellPrice(2), 0.023 ether);
+        assertEq(treasury.curveReserve(), 0.0033 ether);
+        assertEq(treasury.getSellPrice(2), 0.0023 ether);
 
         vm.prank(investor);
-        treasury.sellShares(2, 0.023 ether);
+        treasury.sellShares(2, 0.0023 ether);
         assertEq(treasury.balanceOf(investor), 1);
+        assertEq(treasury.curveReserve(), 0.001 ether);
+    }
+
+    function testSharesAreNonTransferable() public {
+        AgentTreasury treasury = _mintTreasury();
+
+        uint256 buyPrice = treasury.getBuyPrice(2);
+        vm.prank(investor);
+        treasury.buyShares{value: buyPrice}(2, buyPrice);
+
+        vm.prank(investor);
+        vm.expectRevert(AgentTreasury.SharesNonTransferable.selector);
+        treasury.transfer(address(0xCAFE), 1);
     }
 
     function testRevenueSplitAndDividendClaim() public {
@@ -131,6 +138,27 @@ contract AgentContractsTest is Test {
         assertEq(treasury.investorPool(), 0);
     }
 
+    function testBuySharesClaimsPendingDividendsBeforeMint() public {
+        AgentTreasury treasury = _mintTreasury();
+
+        uint256 firstPrice = treasury.getBuyPrice(1);
+        vm.prank(investor);
+        treasury.buyShares{value: firstPrice}(1, firstPrice);
+
+        vm.prank(brand);
+        treasury.paySponsored{value: 1 ether}("sponsored:demo");
+
+        uint256 secondPrice = treasury.getBuyPrice(1);
+        uint256 investorBefore = investor.balance;
+
+        vm.prank(investor);
+        treasury.buyShares{value: secondPrice}(1, secondPrice);
+
+        assertEq(investor.balance, investorBefore + 0.2 ether - secondPrice);
+        assertEq(treasury.claimableDividends(investor), 0);
+        assertEq(treasury.investorPool(), 0);
+    }
+
     function testSpendOpsRequiresWhitelistedRecipient() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -150,6 +178,18 @@ contract AgentContractsTest is Test {
 
         assertEq(computeProvider.balance - providerBefore, 0.1 ether);
         assertEq(treasury.operationalBalance(), 0.6 ether);
+    }
+
+    function testMintFeeCanBeWithdrawnByOwner() public {
+        vm.prank(architect);
+        inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
+
+        address payable recipient = payable(address(0xBEEF));
+        uint256 recipientBefore = recipient.balance;
+        inft.withdrawMintFees(recipient, MINT_FEE);
+
+        assertEq(recipient.balance - recipientBefore, MINT_FEE);
+        assertEq(address(inft).balance, 0);
     }
 
     function _mintTreasury() internal returns (AgentTreasury) {

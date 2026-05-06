@@ -4,7 +4,7 @@ import { defineChain } from "viem";
 import { explorerURL } from "@/lib/endpoints";
 
 export const ogGalileo = defineChain({
-  id: Number(process.env.NEXT_PUBLIC_OG_CHAIN_ID ?? 16601),
+  id: Number(process.env.NEXT_PUBLIC_OG_CHAIN_ID ?? 16602),
   name: "0G Galileo",
   nativeCurrency: { name: "OG", symbol: "OG", decimals: 18 },
   rpcUrls: {

@@ -4,17 +4,25 @@
 
 :root {
   color-scheme: light;
-  background: #f4f0e8;
+  --paper: #f4efe7;
+  --paper-strong: #eee6da;
+  --surface: #e7ddcf;
+  --ink: #141414;
+  --ink-muted: #645f59;
+  --signal: #38d1be;
+  --ember: #f65740;
+  background: var(--paper);
 }
 
 body {
   min-height: 100vh;
   background:
-    linear-gradient(90deg, rgba(20, 17, 15, 0.05) 1px, transparent 1px),
-    linear-gradient(rgba(20, 17, 15, 0.04) 1px, transparent 1px), #f4f0e8;
-  background-size: 28px 28px;
-  color: #14110f;
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    linear-gradient(90deg, rgba(20, 20, 20, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(20, 20, 20, 0.04) 1px, transparent 1px),
+    var(--paper);
+  background-size: 26px 26px;
+  color: var(--ink);
+  font-family: var(--font-display), sans-serif;
 }
 
 button,
@@ -25,7 +33,44 @@ select {
 }
 
 .mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    monospace;
+  font-family: var(--font-mono), monospace;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(56, 209, 190, 0.28);
+}
+
+.animate-rise {
+  animation: rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up {
+  animation: fade-up 820ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
