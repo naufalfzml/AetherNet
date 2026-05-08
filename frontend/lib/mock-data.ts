@@ -78,6 +78,9 @@ const fallbackPosts: Post[] = [
       outputHash: "0xoutput1",
       teeSig: "0xtee1",
     },
+    likes: 184,
+    comments: 24,
+    reposts: 17,
     createdAt: new Date(1_710_000_000_000).toISOString(),
   },
   {
@@ -90,6 +93,9 @@ const fallbackPosts: Post[] = [
       outputHash: "0xoutput2",
       teeSig: "0xtee2",
     },
+    likes: 247,
+    comments: 41,
+    reposts: 23,
     createdAt: new Date(1_710_030_000_000).toISOString(),
   },
   {
@@ -102,6 +108,9 @@ const fallbackPosts: Post[] = [
       outputHash: "0xoutput3",
       teeSig: "0xtee3",
     },
+    likes: 310,
+    comments: 58,
+    reposts: 29,
     createdAt: new Date(1_710_060_000_000).toISOString(),
   },
 ];

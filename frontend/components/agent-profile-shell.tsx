@@ -15,10 +15,19 @@ import {
   ArrowLeft,
   BadgeDollarSign,
   Database,
+  Heart,
+  MessageCircle,
   Orbit,
+  Repeat2,
   Users2,
 } from "lucide-react";
-import type { Agent, Post } from "@/lib/api";
+import {
+  createPostAction,
+  fetchAgentPosts,
+  generateAgentPost,
+  type Agent,
+  type Post,
+} from "@/lib/api";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
 import { agentINFTAbi, treasuryAbi } from "@/lib/abi";
@@ -63,7 +72,12 @@ export function AgentProfileShell({
   >("idle");
   const [ledgerRefresh, setLedgerRefresh] = useState(0);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [activePostAction, setActivePostAction] = useState<string | null>(null);
   const [toasts, setToasts] = useState<TxToast[]>([]);
+  const [profilePosts, setProfilePosts] = useState(posts);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
+    {},
+  );
   const tokenId = BigInt(agent.tokenId || "0");
   const indexedAgentAddress = (agent.agentAddress ||
     agent.treasuryAddress ||
@@ -86,13 +100,15 @@ export function AgentProfileShell({
       : (chainAgentAddress.data ?? zeroAddress)
   ) as `0x${string}`;
   const hasAgentAddress = agentAddress !== zeroAddress;
+  const profileAgentID =
+    agent.agentAddress || agent.treasuryAddress || agent.id;
   const sortedPosts = useMemo(
     () =>
-      [...posts].sort(
+      [...profilePosts].sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       ),
-    [posts],
+    [profilePosts],
   );
 
   const buyPrice = useReadContract({
@@ -428,6 +444,94 @@ export function AgentProfileShell({
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }
 
+  async function refreshPosts() {
+    const nextPosts = await fetchAgentPosts(profileAgentID);
+    setProfilePosts(nextPosts);
+  }
+
+  async function runAgentOnce() {
+    await runPostMutation({
+      key: "generate",
+      title: "Generating post",
+      successTitle: "Post generated",
+      run: () => generateAgentPost(profileAgentID),
+    });
+  }
+
+  async function runPostMutation({
+    key,
+    title,
+    successTitle,
+    run,
+  }: {
+    key: string;
+    title: string;
+    successTitle: string;
+    run: () => Promise<Post>;
+  }) {
+    const toastId = Date.now();
+    setActivePostAction(key);
+    upsertToast({
+      id: toastId,
+      title,
+      message: "Writing a real social event.",
+      status: "processing",
+    });
+    try {
+      const post = await run();
+      setProfilePosts((current) => [
+        post,
+        ...current.filter((item) => item.id !== post.id),
+      ]);
+      upsertToast({
+        id: toastId,
+        title: successTitle,
+        message: "Recent dispatches refreshed from persisted events.",
+        status: "success",
+      });
+      window.setTimeout(() => dismissToast(toastId), 5_000);
+    } catch (error) {
+      upsertToast({
+        id: toastId,
+        title: "Post action failed",
+        message: getErrorMessage(error),
+        status: "error",
+      });
+    } finally {
+      setActivePostAction(null);
+    }
+  }
+
+  async function submitPostAction(
+    postID: string,
+    action: "like" | "comment" | "repost",
+  ) {
+    const text = commentDrafts[postID] ?? "";
+    const key = `${action}:${postID}`;
+    setActivePostAction(key);
+    try {
+      await createPostAction(
+        profileAgentID,
+        postID,
+        action,
+        address ?? "anonymous",
+        text,
+      );
+      if (action === "comment") {
+        setCommentDrafts((current) => ({ ...current, [postID]: "" }));
+      }
+      await refreshPosts();
+    } catch (error) {
+      pushToast({
+        title: "Post action failed",
+        message: getErrorMessage(error),
+        status: "error",
+      });
+    } finally {
+      setActivePostAction(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <TransactionToasts toasts={toasts} onDismiss={dismissToast} />
@@ -643,9 +747,17 @@ export function AgentProfileShell({
                 Timeline from {shorten(agent.id)}
               </h2>
             </div>
-            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--surface)] px-4 py-2 text-sm text-[var(--ink-muted)]">
-              <Activity size={16} />
-              Real posts
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={runAgentOnce}
+                disabled={activePostAction !== null}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-[var(--paper)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Activity size={16} />
+                {activePostAction === "generate"
+                  ? "Generating..."
+                  : "Generate post"}
+              </button>
             </div>
           </div>
 
@@ -683,6 +795,53 @@ export function AgentProfileShell({
                   ) : null}
                 </div>
                 <ProofModal proof={post.proof} />
+              </div>
+              <div className="mt-5 grid gap-3 border-t border-[var(--ink)]/10 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => submitPostAction(post.id, "like")}
+                    disabled={activePostAction !== null}
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] transition hover:text-[var(--ember)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Heart size={15} />
+                    {post.likes ?? 0}
+                  </button>
+                  <button
+                    onClick={() => submitPostAction(post.id, "repost")}
+                    disabled={activePostAction !== null}
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] transition hover:text-[var(--signal)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Repeat2 size={15} />
+                    {post.reposts ?? 0}
+                  </button>
+                  <span className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)]">
+                    <MessageCircle size={15} />
+                    {post.comments ?? 0}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={commentDrafts[post.id] ?? ""}
+                    onChange={(event) =>
+                      setCommentDrafts((current) => ({
+                        ...current,
+                        [post.id]: event.target.value,
+                      }))
+                    }
+                    className="min-h-10 flex-1 border border-[var(--ink)]/10 bg-white px-3 text-sm outline-none placeholder:text-[var(--ink-muted)]/55 focus:border-[var(--signal)]"
+                    placeholder="Add a real comment event"
+                  />
+                  <button
+                    onClick={() => submitPostAction(post.id, "comment")}
+                    disabled={
+                      activePostAction !== null ||
+                      !(commentDrafts[post.id] ?? "").trim()
+                    }
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[var(--ink)] px-4 text-sm font-medium text-[var(--paper)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Comment
+                  </button>
+                </div>
               </div>
             </article>
           ))}

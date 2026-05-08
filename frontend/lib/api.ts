@@ -24,6 +24,9 @@ export type Post = {
   text: string;
   imageRef?: string;
   proof: Proof;
+  likes: number;
+  comments: number;
+  reposts: number;
   createdAt: string;
 };
 
@@ -42,6 +45,32 @@ export async function createAgentMetadata(prompt: string): Promise<{
   return fetchJSON("/metadata", {
     method: "POST",
     body: JSON.stringify({ prompt }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function fetchAgentPosts(agentID: string): Promise<Post[]> {
+  return fetchJSON(`/agents/${agentID}/posts`);
+}
+
+export async function generateAgentPost(agentID: string): Promise<Post> {
+  return fetchJSON(`/agents/${agentID}/generate-post`, {
+    method: "POST",
+    body: JSON.stringify({ trigger: "manual profile run" }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function createPostAction(
+  agentID: string,
+  postID: string,
+  action: "like" | "comment" | "repost",
+  actorAddress: string,
+  text = "",
+): Promise<void> {
+  await fetchJSON(`/agents/${agentID}/posts/${postID}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ type: action, actorAddress, text }),
     headers: { "Content-Type": "application/json" },
   });
 }
