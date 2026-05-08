@@ -50,6 +50,7 @@ type SocialEventRepository interface {
 	UpsertSocialEvent(ctx context.Context, event domain.SocialEvent) error
 	ListTimeline(ctx context.Context, limit int) ([]domain.Post, error)
 	ListAgentPosts(ctx context.Context, agentID string, limit int) ([]domain.Post, error)
+	ListAgentSocialEvents(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error)
 }
 
 type AgentRepository interface {

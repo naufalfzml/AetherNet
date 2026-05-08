@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	stdhttp "net/http"
 	"slices"
@@ -14,11 +15,13 @@ import (
 	"time"
 
 	"github.com/aethernet-0g/aethernet/backend/domain"
+	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
 func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
 	mux.HandleFunc("GET /agents", s.handleAgents)
 	mux.HandleFunc("GET /agents/", s.handleAgentDetail)
+	mux.HandleFunc("POST /agents/", s.handleAgentDetail)
 	mux.HandleFunc("GET /timeline", s.handleTimeline)
 	mux.HandleFunc("POST /metadata", s.handleMetadata)
 	mux.HandleFunc("GET /skills.md", s.handleSkills)
@@ -95,8 +98,24 @@ func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/agents/")
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "generate-post" {
+		s.handleGeneratePost(w, r, parts[0])
+		return
+	}
+	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "seed-post" {
+		s.handleSeedPost(w, r, parts[0])
+		return
+	}
 	if len(parts) == 2 && parts[1] == "posts" {
 		s.handleAgentPosts(w, r, parts[0])
+		return
+	}
+	if r.Method == stdhttp.MethodPost && len(parts) == 4 && parts[1] == "posts" && parts[3] == "actions" {
+		s.handlePostAction(w, r, parts[0], parts[2])
+		return
+	}
+	if r.Method != stdhttp.MethodGet {
+		writeJSON(w, stdhttp.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if len(parts) != 1 || parts[0] == "" {
@@ -128,6 +147,151 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		}
 	}
 	writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+}
+
+func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
+	agent, ok := s.resolveAgentOrError(w, r, agentID)
+	if !ok {
+		return
+	}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+	if s.Compute == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "compute unavailable"})
+		return
+	}
+
+	var request struct {
+		Trigger string `json:"trigger"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+	trigger := strings.TrimSpace(request.Trigger)
+	if trigger == "" {
+		trigger = "manual profile run"
+	}
+
+	personality := agent.PersonalitySummary
+	if s.Metadata != nil && agent.MetadataPointer != "" {
+		metadata, err := s.Metadata.GetMetadata(r.Context(), agent.MetadataPointer)
+		if err == nil && strings.TrimSpace(metadata.Prompt) != "" {
+			personality = metadata.Prompt
+		}
+	}
+	events, _ := s.Events.ListAgentSocialEvents(r.Context(), agent.ID, 20)
+	memory := summarizeEventsForPrompt(events)
+	llm, err := s.Compute.RunLLM(r.Context(), usecase.LLMRequest{
+		AgentID:     agent.ID,
+		Personality: personality,
+		Memory:      memory,
+		Trigger:     trigger,
+	})
+	if err != nil {
+		log.Printf("generate post compute: %v", err)
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "compute failed"})
+		return
+	}
+
+	post, err := s.persistPost(r, agent.ID, llm.OutputText, llm.Proof, "generated")
+	if err != nil {
+		log.Printf("persist generated post: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusCreated, post)
+}
+
+func (s Server) handleSeedPost(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
+	agent, ok := s.resolveAgentOrError(w, r, agentID)
+	if !ok {
+		return
+	}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+
+	var request struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		request.Text = ""
+	}
+	request.Text = strings.TrimSpace(request.Text)
+	if request.Text == "" {
+		request.Text = "First real dispatch from this indexed agent."
+	}
+
+	proof := domain.ProofOfInference{
+		ModelID:    "manual",
+		InputHash:  "0xmanual-input",
+		OutputHash: "0xmanual-output",
+		TEESig:     "0xmanual-sig",
+	}
+	post, err := s.persistPost(r, agent.ID, request.Text, proof, "manual")
+	if err != nil {
+		log.Printf("persist seed post: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusCreated, post)
+}
+
+func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string, postID string) {
+	agent, ok := s.resolveAgentOrError(w, r, agentID)
+	if !ok {
+		return
+	}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+
+	var request struct {
+		Type         string `json:"type"`
+		ActorAddress string `json:"actorAddress"`
+		Text         string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "invalid action payload"})
+		return
+	}
+	request.Type = strings.ToLower(strings.TrimSpace(request.Type))
+	if request.Type != "like" && request.Type != "comment" && request.Type != "repost" {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "unsupported action type"})
+		return
+	}
+	request.ActorAddress = strings.TrimSpace(request.ActorAddress)
+	if request.ActorAddress == "" {
+		request.ActorAddress = "anonymous"
+	}
+	request.Text = strings.TrimSpace(request.Text)
+	if request.Type == "comment" && request.Text == "" {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "comment text is required"})
+		return
+	}
+
+	event := domain.SocialEvent{
+		BlobID:  newEventID(request.Type, agent.ID),
+		Type:    request.Type,
+		AgentID: agent.ID,
+		Payload: map[string]any{
+			"postId":       postID,
+			"actorAddress": request.ActorAddress,
+			"text":         request.Text,
+		},
+		Sig:       "ui",
+		Timestamp: time.Now().UTC(),
+	}
+	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
+		log.Printf("persist post action: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "action persistence failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusCreated, event)
 }
 
 func (s Server) handleTimeline(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -213,6 +377,84 @@ func (s Server) lookupAgent(r *stdhttp.Request, id string) (domain.Agent, error)
 		return s.Agents.GetAgentByAddress(r.Context(), id)
 	}
 	return s.Agents.GetAgentByID(r.Context(), id)
+}
+
+func (s Server) resolveAgentOrError(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) (domain.Agent, bool) {
+	if s.Agents == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "agent storage unavailable"})
+		return domain.Agent{}, false
+	}
+	agent, err := s.lookupAgent(r, agentID)
+	if err == nil {
+		return agent, true
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+		return domain.Agent{}, false
+	}
+	log.Printf("resolve agent: %v", err)
+	writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "resolve agent failed"})
+	return domain.Agent{}, false
+}
+
+func (s Server) persistPost(r *stdhttp.Request, agentID string, text string, proof domain.ProofOfInference, source string) (domain.Post, error) {
+	now := time.Now().UTC()
+	event := domain.SocialEvent{
+		BlobID:  newEventID("post", agentID),
+		Type:    "post",
+		AgentID: agentID,
+		Payload: map[string]any{
+			"text":   text,
+			"proof":  proof,
+			"source": source,
+		},
+		Sig:       source,
+		Timestamp: now,
+	}
+	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
+		return domain.Post{}, err
+	}
+	return domain.Post{
+		ID:        event.BlobID,
+		AgentID:   agentID,
+		Text:      text,
+		Proof:     proof,
+		CreatedAt: now,
+	}, nil
+}
+
+func newEventID(prefix string, agentID string) string {
+	return fmt.Sprintf("%s-%s-%d", prefix, strings.ToLower(strings.TrimPrefix(agentID, "0x")), time.Now().UnixNano())
+}
+
+func summarizeEventsForPrompt(events []domain.SocialEvent) string {
+	if len(events) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, event := range events {
+		switch event.Type {
+		case "post":
+			if text, ok := event.Payload["text"].(string); ok && text != "" {
+				builder.WriteString("Previous post: ")
+				builder.WriteString(text)
+				builder.WriteByte('\n')
+			}
+		case "comment", "like", "repost":
+			builder.WriteString("Engagement ")
+			builder.WriteString(event.Type)
+			if postID, ok := event.Payload["postId"].(string); ok && postID != "" {
+				builder.WriteString(" on ")
+				builder.WriteString(postID)
+			}
+			if text, ok := event.Payload["text"].(string); ok && text != "" {
+				builder.WriteString(": ")
+				builder.WriteString(text)
+			}
+			builder.WriteByte('\n')
+		}
+	}
+	return builder.String()
 }
 
 func isEVMAddress(value string) bool {

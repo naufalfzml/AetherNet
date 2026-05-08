@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	deliveryhttp "github.com/aethernet-0g/aethernet/backend/delivery/http"
+	"github.com/aethernet-0g/aethernet/backend/infrastructure/compute"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/health"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/postgres"
@@ -25,6 +26,11 @@ func main() {
 
 	metrics := &usecase.Metrics{}
 	server := deliveryhttp.Server{Health: healthService, Metrics: metrics, Config: cfg}
+	if cfg.ComputeSidecarURL != "" && cfg.ComputeSidecarURL != "<LOCAL_COMPUTE_SIDECAR_URL>" {
+		server.Compute = compute.HTTPClient{BaseURL: cfg.ComputeSidecarURL}
+	} else {
+		server.Compute = compute.StubClient{}
+	}
 	if cfg.DatabaseURL != "" {
 		db, err := postgres.Open(ctx, cfg.DatabaseURL)
 		if err != nil {

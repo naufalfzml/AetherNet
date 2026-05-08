@@ -27,6 +27,9 @@ type Post struct {
 	Text      string           `json:"text"`
 	ImageRef  string           `json:"imageRef,omitempty"`
 	Proof     ProofOfInference `json:"proof"`
+	Likes     int              `json:"likes"`
+	Comments  int              `json:"comments"`
+	Reposts   int              `json:"reposts"`
 	CreatedAt time.Time        `json:"createdAt"`
 }
 

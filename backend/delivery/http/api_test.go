@@ -86,6 +86,10 @@ func (r fakeEventRepo) ListAgentPosts(_ context.Context, agentID string, _ int) 
 	return r.posts[agentID], nil
 }
 
+func (r fakeEventRepo) ListAgentSocialEvents(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
 func TestAgentsEndpointUsesRepository(t *testing.T) {
 	server := Server{
 		Config: config.Config{StubMode: true},

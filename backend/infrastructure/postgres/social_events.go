@@ -41,10 +41,24 @@ func (r SocialEventRepository) ListTimeline(ctx context.Context, limit int) ([]d
 	}
 
 	rows, err := r.DB.QueryContext(ctx, `
-		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
-		FROM social_events
-		WHERE type = 'post'
-		ORDER BY event_timestamp DESC
+		SELECT
+			p.blob_id,
+			p.type,
+			p.agent_id,
+			p.payload,
+			p.sig,
+			p.event_timestamp,
+			COUNT(*) FILTER (WHERE a.type = 'like') AS likes,
+			COUNT(*) FILTER (WHERE a.type = 'comment') AS comments,
+			COUNT(*) FILTER (WHERE a.type = 'repost') AS reposts
+		FROM social_events p
+		LEFT JOIN social_events a
+			ON a.agent_id = p.agent_id
+			AND a.payload->>'postId' = p.blob_id
+			AND a.type IN ('like', 'comment', 'repost')
+		WHERE p.type = 'post'
+		GROUP BY p.blob_id, p.type, p.agent_id, p.payload, p.sig, p.event_timestamp
+		ORDER BY p.event_timestamp DESC
 		LIMIT $1
 	`, limit)
 	if err != nil {
@@ -54,11 +68,11 @@ func (r SocialEventRepository) ListTimeline(ctx context.Context, limit int) ([]d
 
 	posts := make([]domain.Post, 0)
 	for rows.Next() {
-		event, err := scanSocialEvent(rows)
+		post, err := scanPost(rows)
 		if err != nil {
 			return nil, err
 		}
-		posts = append(posts, eventToPost(event))
+		posts = append(posts, post)
 	}
 	return posts, rows.Err()
 }
@@ -69,10 +83,24 @@ func (r SocialEventRepository) ListAgentPosts(ctx context.Context, agentID strin
 	}
 
 	rows, err := r.DB.QueryContext(ctx, `
-		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
-		FROM social_events
-		WHERE type = 'post' AND agent_id = $1
-		ORDER BY event_timestamp DESC
+		SELECT
+			p.blob_id,
+			p.type,
+			p.agent_id,
+			p.payload,
+			p.sig,
+			p.event_timestamp,
+			COUNT(*) FILTER (WHERE a.type = 'like') AS likes,
+			COUNT(*) FILTER (WHERE a.type = 'comment') AS comments,
+			COUNT(*) FILTER (WHERE a.type = 'repost') AS reposts
+		FROM social_events p
+		LEFT JOIN social_events a
+			ON a.agent_id = p.agent_id
+			AND a.payload->>'postId' = p.blob_id
+			AND a.type IN ('like', 'comment', 'repost')
+		WHERE p.type = 'post' AND p.agent_id = $1
+		GROUP BY p.blob_id, p.type, p.agent_id, p.payload, p.sig, p.event_timestamp
+		ORDER BY p.event_timestamp DESC
 		LIMIT $2
 	`, agentID, limit)
 	if err != nil {
@@ -82,17 +110,91 @@ func (r SocialEventRepository) ListAgentPosts(ctx context.Context, agentID strin
 
 	posts := make([]domain.Post, 0)
 	for rows.Next() {
-		event, err := scanSocialEvent(rows)
+		post, err := scanPost(rows)
 		if err != nil {
 			return nil, err
 		}
-		posts = append(posts, eventToPost(event))
+		posts = append(posts, post)
 	}
 	return posts, rows.Err()
 }
 
+func (r SocialEventRepository) ListAgentSocialEvents(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM social_events
+		WHERE agent_id = $1
+		ORDER BY event_timestamp DESC
+		LIMIT $2
+	`, agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 type socialEventScanner interface {
 	Scan(dest ...any) error
+}
+
+func scanPost(scanner socialEventScanner) (domain.Post, error) {
+	event, likes, comments, reposts, err := scanSocialEventWithCounts(scanner)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	post := eventToPost(event)
+	post.Likes = likes
+	post.Comments = comments
+	post.Reposts = reposts
+	return post, nil
+}
+
+func scanSocialEventWithCounts(scanner socialEventScanner) (domain.SocialEvent, int, int, int, error) {
+	var (
+		event      domain.SocialEvent
+		payloadRaw []byte
+		likes      int
+		comments   int
+		reposts    int
+	)
+	err := scanner.Scan(
+		&event.BlobID,
+		&event.Type,
+		&event.AgentID,
+		&payloadRaw,
+		&event.Sig,
+		&event.Timestamp,
+		&likes,
+		&comments,
+		&reposts,
+	)
+	if err != nil {
+		return domain.SocialEvent{}, 0, 0, 0, err
+	}
+	event.ID = event.BlobID
+	if len(payloadRaw) > 0 {
+		if err := json.Unmarshal(payloadRaw, &event.Payload); err != nil {
+			return domain.SocialEvent{}, 0, 0, 0, err
+		}
+	}
+	if event.Payload == nil {
+		event.Payload = map[string]any{}
+	}
+	return event, likes, comments, reposts, nil
 }
 
 func scanSocialEvent(scanner socialEventScanner) (domain.SocialEvent, error) {
