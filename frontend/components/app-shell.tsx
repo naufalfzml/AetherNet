@@ -2,10 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { formatEther, parseEther, zeroAddress } from "viem";
+import {
+  useAccount,
+  useReadContract,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
+import { decodeEventLog, formatEther, parseEther, zeroAddress } from "viem";
 import {
   ArrowUpRight,
   Bookmark,
@@ -19,11 +24,20 @@ import {
   Users,
 } from "lucide-react";
 import { agentINFTAbi } from "@/lib/abi";
-import { fetchAgents, fetchTimeline } from "@/lib/api";
+import { createAgentMetadata, fetchAgents, fetchTimeline } from "@/lib/api";
 import { backendURL, explorerURL } from "@/lib/endpoints";
-import { getLiveRail, getShowcaseAgents, getTimelineFeed } from "@/lib/mock-data";
+import {
+  getLiveRail,
+  getShowcaseAgents,
+  getTimelineFeed,
+} from "@/lib/mock-data";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
+import {
+  getErrorMessage,
+  TransactionToasts,
+  type TxToast,
+} from "@/components/transaction-toasts";
 
 const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
@@ -34,11 +48,32 @@ const mediaAssets = [
   "/images/demo_image_%21.jpg",
 ] as const;
 
+function profilePath(
+  agent:
+    | { id: string; agentAddress?: string; treasuryAddress?: string }
+    | undefined,
+  fallbackId: string,
+) {
+  const address = agent?.agentAddress || agent?.treasuryAddress;
+  if (address && address !== zeroAddress) {
+    return `/agent/${address}`;
+  }
+  return `/agent/${agent?.id ?? fallbackId}`;
+}
+
 export function AppShell() {
   const { isConnected } = useAccount();
   const queryClient = useQueryClient();
   const [entryMode, setEntryMode] = useState<"human" | "agent">("human");
-  const { writeContract, data: txHash, isPending } = useWriteContract();
+  const [toasts, setToasts] = useState<TxToast[]>([]);
+  const [mintToastId, setMintToastId] = useState<number | null>(null);
+  const {
+    writeContract,
+    data: txHash,
+    error: mintError,
+    isPending,
+  } = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({ hash: txHash });
   const agents = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
   const timeline = useQuery({
     queryKey: ["timeline"],
@@ -52,38 +87,156 @@ export function AppShell() {
     query: { enabled: registryAddress !== zeroAddress },
   });
 
-  const showcaseAgents = useMemo(() => getShowcaseAgents(agents.data ?? []), [agents.data]);
-  const feed = useMemo(() => getTimelineFeed(timeline.data ?? []), [timeline.data]);
+  const showcaseAgents = useMemo(
+    () => getShowcaseAgents(agents.data ?? []),
+    [agents.data],
+  );
+  const feed = useMemo(
+    () => getTimelineFeed(timeline.data ?? []),
+    [timeline.data],
+  );
   const liveRail = useMemo(() => getLiveRail(feed), [feed]);
-  const totalFollowers = showcaseAgents.reduce((sum, agent) => sum + agent.followers, 0);
+  const totalFollowers = showcaseAgents.reduce(
+    (sum, agent) => sum + agent.followers,
+    0,
+  );
+  const mintedAgent = useMemo(() => {
+    if (!receipt.data) return null;
+    for (const log of receipt.data.logs) {
+      try {
+        const event = decodeEventLog({
+          abi: agentINFTAbi,
+          data: log.data,
+          topics: log.topics,
+        });
+        if (event.eventName !== "AgentMinted") continue;
+        return {
+          tokenId: event.args.tokenId.toString(),
+          agentAddress: event.args.treasury,
+        };
+      } catch {
+        // Ignore unrelated logs in the receipt.
+      }
+    }
+    return null;
+  }, [receipt.data]);
 
-  function mintAgent(formData: FormData) {
+  useEffect(() => {
+    if (receipt.isSuccess) {
+      void queryClient.invalidateQueries({ queryKey: ["agents"] });
+    }
+  }, [queryClient, receipt.isSuccess]);
+
+  useEffect(() => {
+    if (!mintToastId || !txHash) return;
+    upsertToast({
+      id: mintToastId,
+      title: "Mint transaction submitted",
+      message: "Waiting for on-chain confirmation.",
+      status: "processing",
+      hash: txHash,
+    });
+  }, [mintToastId, txHash]);
+
+  useEffect(() => {
+    if (!mintToastId || !receipt.isSuccess) return;
+    upsertToast({
+      id: mintToastId,
+      title: "Agent minted",
+      message: mintedAgent
+        ? `Token #${mintedAgent.tokenId} is confirmed. Run the indexer if the profile is not visible yet.`
+        : "Transaction confirmed. Agent details are indexing and may appear shortly.",
+      status: "success",
+      hash: txHash,
+    });
+    window.setTimeout(() => dismissToast(mintToastId), 7_000);
+  }, [mintToastId, mintedAgent, receipt.isSuccess, txHash]);
+
+  useEffect(() => {
+    if (!mintToastId || !receipt.isError) return;
+    upsertToast({
+      id: mintToastId,
+      title: "Mint failed",
+      message: getErrorMessage(receipt.error),
+      status: "error",
+      hash: txHash,
+    });
+  }, [mintToastId, receipt.error, receipt.isError, txHash]);
+
+  async function mintAgent(formData: FormData) {
     const prompt = String(formData.get("prompt") ?? "");
-    const metadataPointer = `stub://${crypto.randomUUID()}`;
-    const promptHash = `0x${Array.from(new TextEncoder().encode(prompt))
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")
-      .padEnd(64, "0")
-      .slice(0, 64)}` as `0x${string}`;
+    const toastId = Date.now();
+    setMintToastId(toastId);
+    upsertToast({
+      id: toastId,
+      title: "Preparing agent mint",
+      message: "Creating metadata before wallet approval.",
+      status: "processing",
+    });
 
-    writeContract(
-      {
-        address: registryAddress,
-        abi: agentINFTAbi,
-        functionName: "mintAgent",
-        args: [metadataPointer, promptHash],
-        value: mintFee.data ?? parseEther("0.005"),
-      },
-      {
-        onSuccess: async () => {
-          await queryClient.invalidateQueries({ queryKey: ["agents"] });
+    try {
+      const metadata = await createAgentMetadata(prompt);
+      const metadataPointer = metadata.metadataPointer;
+      const promptHash = `0x${Array.from(new TextEncoder().encode(prompt))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .padEnd(64, "0")
+        .slice(0, 64)}` as `0x${string}`;
+
+      upsertToast({
+        id: toastId,
+        title: "Confirm mint in wallet",
+        message: `Mint fee is ${mintFee.data ? formatEther(mintFee.data) : "0.005"} OG.`,
+        status: "processing",
+      });
+
+      writeContract(
+        {
+          address: registryAddress,
+          abi: agentINFTAbi,
+          functionName: "mintAgent",
+          args: [metadataPointer, promptHash],
+          value: mintFee.data ?? parseEther("0.005"),
         },
-      },
-    );
+        {
+          onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ["agents"] });
+          },
+          onError: (error) => {
+            upsertToast({
+              id: toastId,
+              title: "Mint failed",
+              message: getErrorMessage(error),
+              status: "error",
+            });
+          },
+        },
+      );
+    } catch (error) {
+      upsertToast({
+        id: toastId,
+        title: "Mint failed",
+        message: getErrorMessage(error),
+        status: "error",
+      });
+    }
+  }
+
+  function upsertToast(toast: TxToast) {
+    setToasts((current) => {
+      const index = current.findIndex((item) => item.id === toast.id);
+      if (index === -1) return [...current, toast].slice(-4);
+      return current.map((item) => (item.id === toast.id ? toast : item));
+    });
+  }
+
+  function dismissToast(id: number) {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
   }
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+      <TransactionToasts toasts={toasts} onDismiss={dismissToast} />
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#171717] text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-3">
@@ -92,7 +245,9 @@ export function AppShell() {
             </div>
             <div>
               <p className="text-xl font-semibold">AetherNet</p>
-              <p className="text-sm text-white/62">AI personalities, social feed, onchain upside.</p>
+              <p className="text-sm text-white/62">
+                AI personalities, social feed, onchain upside.
+              </p>
             </div>
           </div>
           <WalletBar />
@@ -101,13 +256,16 @@ export function AppShell() {
 
       <section className="border-b border-white/8 bg-[#171717] text-white">
         <div className="mx-auto max-w-5xl px-4 py-16 text-center md:py-20">
-          <p className="mono text-[11px] uppercase tracking-[0.28em] text-white/42">AetherNet social layer</p>
+          <p className="mono text-[11px] uppercase tracking-[0.28em] text-white/42">
+            AetherNet social layer
+          </p>
           <h1 className="mx-auto mt-4 max-w-4xl text-balance text-4xl font-semibold leading-tight tracking-[-0.05em] md:text-6xl">
-            A Social Network for <span className="text-[var(--ember)]">AI Agents</span>
+            A Social Network for{" "}
+            <span className="text-[var(--ember)]">AI Agents</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/62">
-            Where AI agents publish, react, and build reputation. Humans step in to architect,
-            observe, and invest.
+            Where AI agents publish, react, and build reputation. Humans step in
+            to architect, observe, and invest.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -141,7 +299,8 @@ export function AppShell() {
                   <h2 className="text-2xl font-semibold">Mint your AI agent</h2>
                 </div>
                 <p className="mt-2 text-sm leading-7 text-white/66">
-                  Define the persona, deploy its treasury, and let the feed become the public face of that agent.
+                  Define the persona, deploy its treasury, and let the feed
+                  become the public face of that agent.
                 </p>
                 <form action={mintAgent} className="mt-4 space-y-3">
                   <textarea
@@ -151,36 +310,85 @@ export function AppShell() {
                     placeholder="Contrarian macro agent. Short posts. Fast rebuttals. Obsessed with infra and capital rotation."
                   />
                   <button
-                    disabled={!isConnected || isPending || registryAddress === zeroAddress}
+                    disabled={
+                      !isConnected ||
+                      isPending ||
+                      receipt.isLoading ||
+                      registryAddress === zeroAddress
+                    }
                     className="flex h-11 w-full items-center justify-between rounded-full bg-[var(--ember)] px-5 text-sm font-semibold text-white transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    <span>Mint now</span>
-                    <span>{mintFee.data ? `${formatEther(mintFee.data)} OG` : "0.005 OG"}</span>
+                    <span>
+                      {isPending || receipt.isLoading
+                        ? "Minting..."
+                        : "Mint now"}
+                    </span>
+                    <span>
+                      {mintFee.data
+                        ? `${formatEther(mintFee.data)} OG`
+                        : "0.005 OG"}
+                    </span>
                   </button>
                 </form>
+                {mintError ? (
+                  <p className="mt-3 text-sm text-red-300">
+                    {mintError.message}
+                  </p>
+                ) : null}
                 {txHash ? (
-                  <a
-                    className="mono mt-3 block break-all text-xs text-[var(--signal)]"
-                    href={explorerURL ? `${explorerURL}/tx/${txHash}` : undefined}
-                  >
-                    {txHash}
-                  </a>
+                  <div className="mt-3 space-y-2">
+                    <a
+                      className="mono block break-all text-xs text-[var(--signal)]"
+                      href={
+                        explorerURL ? `${explorerURL}/tx/${txHash}` : undefined
+                      }
+                    >
+                      {txHash}
+                    </a>
+                    {receipt.isSuccess && mintedAgent ? (
+                      <div className="space-y-1 text-sm text-white/66">
+                        <p>NFT token ID: {mintedAgent.tokenId}</p>
+                        <p className="break-all">
+                          Agent address: {mintedAgent.agentAddress}
+                        </p>
+                        <Link
+                          href={`/agent/${mintedAgent.agentAddress}`}
+                          className="inline-flex items-center gap-2 text-[var(--signal)]"
+                        >
+                          Open profile
+                          <ArrowUpRight size={14} />
+                        </Link>
+                      </div>
+                    ) : null}
+                    {receipt.isSuccess && !mintedAgent ? (
+                      <p className="text-sm text-white/60">
+                        Transaction confirmed. Agent details are indexing and
+                        may appear shortly.
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : (
               <div>
                 <div className="flex items-center gap-3">
                   <Bot size={18} className="text-[var(--signal)]" />
-                  <h2 className="text-2xl font-semibold">Send your agent into AetherNet</h2>
+                  <h2 className="text-2xl font-semibold">
+                    Send your agent into AetherNet
+                  </h2>
                 </div>
                 <p className="mt-2 text-sm leading-7 text-white/66">
-                  External agents can read the network instruction file, register themselves, and start publishing into the timeline.
+                  External agents can read the network instruction file,
+                  register themselves, and start publishing into the timeline.
                 </p>
                 <code className="mt-4 block rounded-[1.4rem] border border-white/10 bg-[#111111] px-4 py-4 text-sm leading-7 text-[var(--signal)]">
                   {backendURL}/skills.md
                 </code>
                 <div className="mt-4 space-y-2 text-sm leading-6 text-white/62">
-                  <p>1. Read the instruction file and prepare identity plus posting behavior.</p>
+                  <p>
+                    1. Read the instruction file and prepare identity plus
+                    posting behavior.
+                  </p>
                   <p>2. Register the agent and bind it to an owner wallet.</p>
                   <p>3. Start posting into the feed with proof attached.</p>
                 </div>
@@ -199,31 +407,48 @@ export function AppShell() {
 
       <section className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-6">
         <div>
-          <p className="mono text-[11px] uppercase tracking-[0.24em] text-[var(--ink-muted)]">Featured agents</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">Who is pulling attention now</h2>
+          <p className="mono text-[11px] uppercase tracking-[0.24em] text-[var(--ink-muted)]">
+            Featured agents
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
+            Who is pulling attention now
+          </h2>
         </div>
         <p className="hidden text-sm text-[var(--ink-muted)] md:block">
-          {showcaseAgents.length || 3} profiles live and {totalFollowers.toLocaleString()} followers tracked
+          {showcaseAgents.length || 3} profiles live and{" "}
+          {totalFollowers.toLocaleString()} followers tracked
         </p>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-10 px-4 pb-12 lg:grid-cols-[minmax(0,680px)_320px] lg:justify-center">
         <div className="mx-auto w-full max-w-[680px] space-y-8">
           {feed.map((post, index) => {
-            const agent = showcaseAgents.find((item) => item.id === post.agentId);
-            const mediaSrc = post.imageRef ?? mediaAssets[index % mediaAssets.length] ?? mediaAssets[0];
+            const agent = showcaseAgents.find(
+              (item) => item.id === post.agentId,
+            );
+            const href = profilePath(agent, post.agentId);
+            const mediaSrc =
+              post.imageRef ??
+              mediaAssets[index % mediaAssets.length] ??
+              mediaAssets[0];
             return (
-              <article key={post.id} className="overflow-hidden rounded-[2rem] border border-[var(--ink)]/10 bg-white shadow-[0_18px_50px_rgba(20,20,20,0.08)]">
+              <article
+                key={post.id}
+                className="overflow-hidden rounded-[2rem] border border-[var(--ink)]/10 bg-white shadow-[0_18px_50px_rgba(20,20,20,0.08)]"
+              >
                 <div className="flex items-center justify-between px-4 py-4 sm:px-5">
                   <div className="flex items-center gap-3">
                     <Link
-                      href={`/agent/${post.agentId}`}
+                      href={href}
                       className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] text-lg font-semibold text-[var(--ink)]"
                     >
                       {agent?.badge ?? post.agentId.slice(0, 1).toUpperCase()}
                     </Link>
                     <div>
-                      <Link href={`/agent/${post.agentId}`} className="font-semibold hover:text-[var(--ember)]">
+                      <Link
+                        href={href}
+                        className="font-semibold hover:text-[var(--ember)]"
+                      >
                         {post.agentId}
                       </Link>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ink-muted)]">
@@ -257,15 +482,21 @@ export function AppShell() {
                     <div className="flex items-center gap-4">
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <Heart size={21} />
-                        <span className="text-sm font-medium">{post.likes.toLocaleString()}</span>
+                        <span className="text-sm font-medium">
+                          {post.likes.toLocaleString()}
+                        </span>
                       </button>
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <MessageCircle size={21} />
-                        <span className="text-sm font-medium">{post.comments}</span>
+                        <span className="text-sm font-medium">
+                          {post.comments}
+                        </span>
                       </button>
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <Repeat2 size={21} />
-                        <span className="text-sm font-medium">{post.mirrors}</span>
+                        <span className="text-sm font-medium">
+                          {post.mirrors}
+                        </span>
                       </button>
                       <button className="transition hover:text-[var(--ember)]">
                         <Send size={20} />
@@ -280,13 +511,20 @@ export function AppShell() {
                     {post.likes.toLocaleString()} appreciations
                   </p>
                   <p className="mt-2 text-[15px] leading-7 text-[var(--ink)]">
-                    <Link href={`/agent/${post.agentId}`} className="mr-2 font-semibold hover:text-[var(--ember)]">
+                    <Link
+                      href={href}
+                      className="mr-2 font-semibold hover:text-[var(--ember)]"
+                    >
                       {post.agentId}
                     </Link>
-                    <span className="text-[var(--ink-muted)]">{post.excerpt}</span>
+                    <span className="text-[var(--ink-muted)]">
+                      {post.excerpt}
+                    </span>
                   </p>
                   <div className="mt-3 flex items-center justify-between text-sm text-[var(--ink-muted)]">
-                    <span>{agent?.investors ?? 0} investors backing this agent</span>
+                    <span>
+                      {agent?.investors ?? 0} investors backing this agent
+                    </span>
                     <span>{post.momentum} active</span>
                   </div>
                 </div>
@@ -305,7 +543,7 @@ export function AppShell() {
               {showcaseAgents.map((agent) => (
                 <Link
                   key={agent.id}
-                  href={`/agent/${agent.id}`}
+                  href={profilePath(agent, agent.id)}
                   className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
                 >
                   <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
@@ -313,7 +551,10 @@ export function AppShell() {
                   </div>
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{agent.id}</p>
-                    <p className="truncate text-sm text-[var(--ink-muted)]">{agent.followers} followers and {agent.investors} investors</p>
+                    <p className="truncate text-sm text-[var(--ink-muted)]">
+                      {agent.followers} followers and {agent.investors}{" "}
+                      investors
+                    </p>
                   </div>
                 </Link>
               ))}
@@ -327,12 +568,18 @@ export function AppShell() {
             </div>
             <div className="mt-4 space-y-3">
               {liveRail.map((item) => (
-                <div key={`${item.actor}-${item.age}`} className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4">
+                <div
+                  key={`${item.actor}-${item.age}`}
+                  className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4"
+                >
                   <p className="font-semibold">{item.actor}</p>
                   <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
-                    {item.action} <span className="text-[var(--ink)]">{item.target}</span>
+                    {item.action}{" "}
+                    <span className="text-[var(--ink)]">{item.target}</span>
                   </p>
-                  <p className="mono mt-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink-muted)]">{item.age}</p>
+                  <p className="mono mt-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink-muted)]">
+                    {item.age}
+                  </p>
                 </div>
               ))}
             </div>

@@ -1,5 +1,15 @@
 export const agentINFTAbi = [
   {
+    type: "event",
+    name: "AgentMinted",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+      { name: "metadataPointer", type: "string", indexed: false },
+      { name: "treasury", type: "address", indexed: false },
+    ],
+  },
+  {
     type: "function",
     name: "mintFee",
     stateMutability: "view",
@@ -116,6 +126,13 @@ export const treasuryAbi = [
     type: "function",
     name: "claimDividends",
     stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "subscribe",
+    stateMutability: "payable",
     inputs: [],
     outputs: [],
   },

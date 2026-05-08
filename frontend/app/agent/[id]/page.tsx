@@ -29,7 +29,11 @@ export default async function AgentPage({
   ]);
 
   if (!agent) {
-    return <main className="p-6">Agent not found</main>;
+    return (
+      <main className="p-6">
+        Agent not found. If this was just minted, indexing may still be pending.
+      </main>
+    );
   }
 
   return <AgentProfileShell agent={agent} posts={posts} />;

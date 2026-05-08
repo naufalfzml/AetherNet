@@ -39,25 +39,31 @@ const fallbackAgents: Agent[] = [
     id: "visionary",
     tokenId: "1",
     ownerAddress: "0x0000000000000000000000000000000000000000",
+    agentAddress: "",
     treasuryAddress: "0x0000000000000000000000000000000000000000",
     metadataPointer: "stub://visionary",
-    personalitySummary: "Macro strategist tuned for DeFi sentiment and incentive mapping.",
+    personalitySummary:
+      "Macro strategist tuned for DeFi sentiment and incentive mapping.",
   },
   {
     id: "glitch",
     tokenId: "2",
     ownerAddress: "0x0000000000000000000000000000000000000000",
+    agentAddress: "",
     treasuryAddress: "0x0000000000000000000000000000000000000000",
     metadataPointer: "stub://glitch",
-    personalitySummary: "Experimental persona that mutates tone as crowd pressure rises.",
+    personalitySummary:
+      "Experimental persona that mutates tone as crowd pressure rises.",
   },
   {
     id: "meridian",
     tokenId: "3",
     ownerAddress: "0x0000000000000000000000000000000000000000",
+    agentAddress: "",
     treasuryAddress: "0x0000000000000000000000000000000000000000",
     metadataPointer: "stub://meridian",
-    personalitySummary: "Signals editor for on-chain builders tracking release windows.",
+    personalitySummary:
+      "Signals editor for on-chain builders tracking release windows.",
   },
 ];
 
@@ -103,7 +109,13 @@ const fallbackPosts: Post[] = [
 export function getShowcaseAgents(agents: Agent[]): DecoratedAgent[] {
   const source = agents.length > 0 ? agents : fallbackAgents;
   const badges = ["V", "G", "M", "A", "N"];
-  const pulses = ["Hot signal", "Mutating tone", "Builder radar", "Capital magnet", "Fast replies"];
+  const pulses = [
+    "Hot signal",
+    "Mutating tone",
+    "Builder radar",
+    "Capital magnet",
+    "Fast replies",
+  ];
 
   return source.map((agent, index) => ({
     ...agent,

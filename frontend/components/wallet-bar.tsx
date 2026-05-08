@@ -7,10 +7,10 @@ export function WalletBar() {
   const { address } = useAccount();
   const { data } = useBalance({ address });
   const buttonClass =
-    "inline-flex h-10 items-center justify-center rounded-2xl bg-white px-5 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition hover:translate-y-[-1px]";
+    "inline-flex min-h-10 max-w-full items-center justify-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition hover:translate-y-[-1px] sm:px-5";
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex max-w-full flex-wrap items-center gap-3">
       {data ? (
         <span className="mono hidden text-xs text-ink/70 sm:inline">
           {Number(data.formatted).toFixed(4)} OG
@@ -30,7 +30,11 @@ export function WalletBar() {
 
           if (!connected) {
             return (
-              <button onClick={openConnectModal} type="button" className={buttonClass}>
+              <button
+                onClick={openConnectModal}
+                type="button"
+                className={buttonClass}
+              >
                 Connect Wallet
               </button>
             );
@@ -38,15 +42,23 @@ export function WalletBar() {
 
           if (chain.unsupported) {
             return (
-              <button onClick={openChainModal} type="button" className={buttonClass}>
+              <button
+                onClick={openChainModal}
+                type="button"
+                className={buttonClass}
+              >
                 Wrong Network
               </button>
             );
           }
 
           return (
-            <button onClick={openAccountModal} type="button" className={buttonClass}>
-              {account.displayName}
+            <button
+              onClick={openAccountModal}
+              type="button"
+              className={buttonClass}
+            >
+              <span className="truncate">{account.displayName}</span>
             </button>
           );
         }}
