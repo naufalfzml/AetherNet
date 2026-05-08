@@ -9,20 +9,22 @@ import (
 )
 
 type Config struct {
-	HTTPAddr          string
-	DatabaseURL       string
-	StubMode          bool
-	OGRPCURL          string
-	OGChainID         string
-	OGExplorerURL     string
-	ComputeSidecarURL string
-	ImageProvider     string
-	INFTRegistry      string
-	TreasuryFactory   string
-	DemoTokenID       string
-	DemoTreasury      string
-	PlatformWallet    string
-	Orchestrator      string
+	HTTPAddr             string
+	DatabaseURL          string
+	StubMode             bool
+	OGRPCURL             string
+	OGChainID            string
+	OGExplorerURL        string
+	IndexerStartBlock    string
+	IndexerConfirmations string
+	ComputeSidecarURL    string
+	ImageProvider        string
+	INFTRegistry         string
+	TreasuryFactory      string
+	DemoTokenID          string
+	DemoTreasury         string
+	PlatformWallet       string
+	Orchestrator         string
 }
 
 func Load() Config {
@@ -30,20 +32,22 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
-		HTTPAddr:          env("HTTP_ADDR", env("BACKEND_HTTP_ADDR", ":8080")),
-		DatabaseURL:       env("DATABASE_URL", ""),
-		StubMode:          envBool("STUB_MODE", true),
-		OGRPCURL:          env("OG_RPC_URL", ""),
-		OGChainID:         env("OG_CHAIN_ID", "16602"),
-		OGExplorerURL:     env("OG_EXPLORER_URL", ""),
-		ComputeSidecarURL: env("COMPUTE_SIDECAR_URL", ""),
-		ImageProvider:     env("IMAGE_PROVIDER", "none"),
-		INFTRegistry:      env("INFT_REGISTRY_ADDRESS", ""),
-		TreasuryFactory:   env("TREASURY_FACTORY_ADDRESS", ""),
-		DemoTokenID:       env("DEMO_TOKEN_ID", "1"),
-		DemoTreasury:      env("DEMO_TREASURY_ADDRESS", ""),
-		PlatformWallet:    env("PLATFORM_WALLET", ""),
-		Orchestrator:      env("ORCHESTRATOR_ADDRESS", ""),
+		HTTPAddr:             env("HTTP_ADDR", env("BACKEND_HTTP_ADDR", ":8080")),
+		DatabaseURL:          env("DATABASE_URL", ""),
+		StubMode:             envBool("STUB_MODE", true),
+		OGRPCURL:             env("OG_RPC_URL", ""),
+		OGChainID:            env("OG_CHAIN_ID", "16602"),
+		OGExplorerURL:        env("OG_EXPLORER_URL", ""),
+		IndexerStartBlock:    env("INDEXER_START_BLOCK", "0"),
+		IndexerConfirmations: env("INDEXER_CONFIRMATIONS", "2"),
+		ComputeSidecarURL:    env("COMPUTE_SIDECAR_URL", ""),
+		ImageProvider:        env("IMAGE_PROVIDER", "none"),
+		INFTRegistry:         env("INFT_REGISTRY_ADDRESS", ""),
+		TreasuryFactory:      env("TREASURY_FACTORY_ADDRESS", ""),
+		DemoTokenID:          env("DEMO_TOKEN_ID", "1"),
+		DemoTreasury:         env("DEMO_TREASURY_ADDRESS", ""),
+		PlatformWallet:       env("PLATFORM_WALLET", ""),
+		Orchestrator:         env("ORCHESTRATOR_ADDRESS", ""),
 	}
 }
 

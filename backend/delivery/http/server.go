@@ -9,9 +9,12 @@ import (
 )
 
 type Server struct {
-	Health  usecase.HealthService
-	Metrics *usecase.Metrics
-	Config  config.Config
+	Health   usecase.HealthService
+	Metrics  *usecase.Metrics
+	Config   config.Config
+	Agents   usecase.AgentRepository
+	Events   usecase.SocialEventRepository
+	Metadata usecase.AgentMetadataRepository
 }
 
 func (s Server) Handler() stdhttp.Handler {
@@ -19,7 +22,20 @@ func (s Server) Handler() stdhttp.Handler {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.registerAPIRoutes(mux)
-	return mux
+	return withCORS(mux)
+}
+
+func withCORS(next stdhttp.Handler) stdhttp.Handler {
+	return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == stdhttp.MethodOptions {
+			w.WriteHeader(stdhttp.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s Server) handleHealth(w stdhttp.ResponseWriter, r *stdhttp.Request) {

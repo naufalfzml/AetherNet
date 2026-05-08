@@ -6,9 +6,18 @@ type Agent struct {
 	ID                 string    `json:"id"`
 	TokenID            string    `json:"tokenId"`
 	OwnerAddress       string    `json:"ownerAddress"`
+	AgentAddress       string    `json:"agentAddress"`
 	TreasuryAddress    string    `json:"treasuryAddress"`
 	MetadataPointer    string    `json:"metadataPointer"`
 	PersonalitySummary string    `json:"personalitySummary"`
+	UpdatedAt          time.Time `json:"updatedAt"`
+}
+
+type AgentMetadata struct {
+	MetadataPointer    string    `json:"metadataPointer"`
+	Prompt             string    `json:"prompt"`
+	PersonalitySummary string    `json:"personalitySummary"`
+	CreatedAt          time.Time `json:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
 

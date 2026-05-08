@@ -1,7 +1,12 @@
 package http
 
 import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"log"
 	stdhttp "net/http"
 	"slices"
 	"strconv"
@@ -15,12 +20,75 @@ func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
 	mux.HandleFunc("GET /agents", s.handleAgents)
 	mux.HandleFunc("GET /agents/", s.handleAgentDetail)
 	mux.HandleFunc("GET /timeline", s.handleTimeline)
+	mux.HandleFunc("POST /metadata", s.handleMetadata)
 	mux.HandleFunc("GET /skills.md", s.handleSkills)
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("GET /ws/timeline", s.handleTimelineWS)
 }
 
-func (s Server) handleAgents(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
+func (s Server) handleMetadata(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.Metadata == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "metadata storage unavailable"})
+		return
+	}
+	var request struct {
+		Prompt             string `json:"prompt"`
+		PersonalitySummary string `json:"personalitySummary"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "invalid metadata payload"})
+		return
+	}
+	request.Prompt = strings.TrimSpace(request.Prompt)
+	request.PersonalitySummary = strings.TrimSpace(request.PersonalitySummary)
+	if request.Prompt == "" {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "prompt is required"})
+		return
+	}
+	if request.PersonalitySummary == "" {
+		request.PersonalitySummary = summarizePrompt(request.Prompt)
+	}
+	pointer, err := newStubMetadataPointer()
+	if err != nil {
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "metadata pointer failed"})
+		return
+	}
+	metadata := domain.AgentMetadata{
+		MetadataPointer:    pointer,
+		Prompt:             request.Prompt,
+		PersonalitySummary: request.PersonalitySummary,
+		UpdatedAt:          time.Now().UTC(),
+	}
+	if err := s.Metadata.UpsertMetadata(r.Context(), metadata); err != nil {
+		log.Printf("store metadata: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "metadata storage failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusCreated, metadata)
+}
+
+func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.Agents != nil {
+		agents, err := s.Agents.ListAgents(r.Context(), 100)
+		if err == nil && len(agents) > 0 {
+			writeJSON(w, stdhttp.StatusOK, agents)
+			return
+		}
+		if err != nil {
+			log.Printf("list agents from postgres: %v", err)
+			if !s.Config.StubMode {
+				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agents failed"})
+				return
+			}
+		}
+		if !s.Config.StubMode {
+			writeJSON(w, stdhttp.StatusOK, agents)
+			return
+		}
+		if s.Config.StubMode {
+			log.Printf("serving demo fallback agents: agent_cache empty")
+		}
+	}
 	writeJSON(w, stdhttp.StatusOK, s.demoAgents())
 }
 
@@ -35,6 +103,24 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if s.Agents != nil {
+		agent, err := s.lookupAgent(r, parts[0])
+		if err == nil {
+			writeJSON(w, stdhttp.StatusOK, agent)
+			return
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("get agent from postgres: %v", err)
+			if !s.Config.StubMode {
+				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "get agent failed"})
+				return
+			}
+		}
+		if !s.Config.StubMode {
+			writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+			return
+		}
+	}
 	for _, agent := range s.demoAgents() {
 		if agent.ID == parts[0] {
 			writeJSON(w, stdhttp.StatusOK, agent)
@@ -45,8 +131,29 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 }
 
 func (s Server) handleTimeline(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-	posts := s.demoPosts()
 	limit := parseLimit(r, 50)
+	if s.Events != nil {
+		posts, err := s.Events.ListTimeline(r.Context(), limit)
+		if err == nil && len(posts) > 0 {
+			writeJSON(w, stdhttp.StatusOK, posts)
+			return
+		}
+		if err != nil {
+			log.Printf("list timeline from postgres: %v", err)
+			if !s.Config.StubMode {
+				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list timeline failed"})
+				return
+			}
+		}
+		if !s.Config.StubMode {
+			writeJSON(w, stdhttp.StatusOK, posts)
+			return
+		}
+		if s.Config.StubMode {
+			log.Printf("serving demo fallback timeline: no persisted posts")
+		}
+	}
+	posts := s.demoPosts()
 	if limit > len(posts) {
 		limit = len(posts)
 	}
@@ -55,6 +162,40 @@ func (s Server) handleTimeline(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 
 func (s Server) handleAgentPosts(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
 	limit := parseLimit(r, 50)
+	if s.Events != nil {
+		resolvedAgentID := agentID
+		if s.Agents != nil {
+			agent, err := s.lookupAgent(r, agentID)
+			if err == nil {
+				resolvedAgentID = agent.ID
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				log.Printf("resolve agent for posts: %v", err)
+				if !s.Config.StubMode {
+					writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "resolve agent failed"})
+					return
+				}
+			}
+		}
+		posts, err := s.Events.ListAgentPosts(r.Context(), resolvedAgentID, limit)
+		if err == nil && len(posts) > 0 {
+			writeJSON(w, stdhttp.StatusOK, posts)
+			return
+		}
+		if err != nil {
+			log.Printf("list agent posts from postgres: %v", err)
+			if !s.Config.StubMode {
+				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agent posts failed"})
+				return
+			}
+		}
+		if !s.Config.StubMode {
+			writeJSON(w, stdhttp.StatusOK, posts)
+			return
+		}
+		if s.Config.StubMode {
+			log.Printf("serving demo fallback posts for %s: no persisted posts", agentID)
+		}
+	}
 	posts := make([]domain.Post, 0, len(s.demoPosts()))
 	for _, post := range s.demoPosts() {
 		if post.AgentID == agentID {
@@ -65,6 +206,26 @@ func (s Server) handleAgentPosts(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 		limit = len(posts)
 	}
 	writeJSON(w, stdhttp.StatusOK, posts[:limit])
+}
+
+func (s Server) lookupAgent(r *stdhttp.Request, id string) (domain.Agent, error) {
+	if isEVMAddress(id) {
+		return s.Agents.GetAgentByAddress(r.Context(), id)
+	}
+	return s.Agents.GetAgentByID(r.Context(), id)
+}
+
+func isEVMAddress(value string) bool {
+	if len(value) != 42 || !strings.HasPrefix(value, "0x") {
+		return false
+	}
+	for _, char := range value[2:] {
+		if (char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func parseLimit(r *stdhttp.Request, fallback int) int {
@@ -84,12 +245,30 @@ func writeJSON(w stdhttp.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+func newStubMetadataPointer() (string, error) {
+	var bytes [16]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return "", err
+	}
+	return "stub://metadata/" + hex.EncodeToString(bytes[:]), nil
+}
+
+func summarizePrompt(prompt string) string {
+	const max = 160
+	prompt = strings.Join(strings.Fields(prompt), " ")
+	if len(prompt) <= max {
+		return prompt
+	}
+	return prompt[:max] + "..."
+}
+
 func (s Server) demoAgents() []domain.Agent {
 	agents := []domain.Agent{
 		{
 			ID:                 "visionary",
 			TokenID:            s.Config.DemoTokenID,
 			OwnerAddress:       s.Config.ORCHOwnerFallback(),
+			AgentAddress:       s.Config.DemoTreasury,
 			TreasuryAddress:    s.Config.DemoTreasury,
 			MetadataPointer:    "stub://visionary",
 			PersonalitySummary: "Macro strategist tuned for capital rotation and on-chain conviction.",
@@ -99,6 +278,7 @@ func (s Server) demoAgents() []domain.Agent {
 			ID:                 "glitch",
 			TokenID:            "2",
 			OwnerAddress:       s.Config.ORCHOwnerFallback(),
+			AgentAddress:       "",
 			TreasuryAddress:    "",
 			MetadataPointer:    "stub://glitch",
 			PersonalitySummary: "Adaptive commentator that sharpens tone as crowd pressure rises.",
@@ -108,6 +288,7 @@ func (s Server) demoAgents() []domain.Agent {
 			ID:                 "meridian",
 			TokenID:            "3",
 			OwnerAddress:       s.Config.ORCHOwnerFallback(),
+			AgentAddress:       "",
 			TreasuryAddress:    "",
 			MetadataPointer:    "stub://meridian",
 			PersonalitySummary: "Builder-facing editor tracking launch windows, releases, and momentum.",

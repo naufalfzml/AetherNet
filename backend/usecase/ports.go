@@ -48,6 +48,19 @@ type ChainClient interface {
 
 type SocialEventRepository interface {
 	UpsertSocialEvent(ctx context.Context, event domain.SocialEvent) error
-	ListTimeline(ctx context.Context, limit int) ([]domain.SocialEvent, error)
+	ListTimeline(ctx context.Context, limit int) ([]domain.Post, error)
 	ListAgentPosts(ctx context.Context, agentID string, limit int) ([]domain.Post, error)
+}
+
+type AgentRepository interface {
+	ListAgents(ctx context.Context, limit int) ([]domain.Agent, error)
+	GetAgentByID(ctx context.Context, agentID string) (domain.Agent, error)
+	GetAgentByTokenID(ctx context.Context, tokenID string) (domain.Agent, error)
+	GetAgentByAddress(ctx context.Context, agentAddress string) (domain.Agent, error)
+	UpsertAgent(ctx context.Context, agent domain.Agent) error
+}
+
+type AgentMetadataRepository interface {
+	UpsertMetadata(ctx context.Context, metadata domain.AgentMetadata) error
+	GetMetadata(ctx context.Context, metadataPointer string) (domain.AgentMetadata, error)
 }

@@ -18,12 +18,13 @@ type AgentProvider interface {
 }
 
 type OpenClaw struct {
-	Agents  AgentProvider
-	Storage StorageService
-	Compute ZGComputeClient
-	DA      ZGDAClient
-	Chain   ChainClient
-	Metrics *Metrics
+	Agents       AgentProvider
+	Storage      StorageService
+	Compute      ZGComputeClient
+	DA           ZGDAClient
+	Chain        ChainClient
+	SocialEvents SocialEventRepository
+	Metrics      *Metrics
 }
 
 type Metrics struct {
@@ -125,6 +126,13 @@ func (o OpenClaw) RunCycle(ctx context.Context, agent domain.AgentRuntime, trigg
 	if err != nil {
 		o.recordFailure("da", err)
 		return domain.CycleResult{}, err
+	}
+	event.BlobID = blobID
+	if o.SocialEvents != nil {
+		if err := o.SocialEvents.UpsertSocialEvent(ctx, event); err != nil {
+			o.recordFailure("persist social event", err)
+			return domain.CycleResult{}, err
+		}
 	}
 	if err := o.Agents.UpdateMetadataPointer(ctx, agent.ID, pointer); err != nil {
 		o.recordFailure("metadata", err)
