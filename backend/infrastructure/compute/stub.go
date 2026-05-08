@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 
 	"github.com/aethernet-0g/aethernet/backend/domain"
 	"github.com/aethernet-0g/aethernet/backend/usecase"
@@ -16,7 +17,11 @@ func (StubClient) Health(context.Context) error {
 }
 
 func (StubClient) RunLLM(_ context.Context, req usecase.LLMRequest) (usecase.LLMResponse, error) {
-	output := "AetherNet stub response for " + req.AgentID + ": " + req.Trigger
+	personality := strings.TrimSpace(req.Personality)
+	if personality == "" {
+		personality = "protocol-native agent tracking onchain attention, liquidity, and builder momentum"
+	}
+	output := "I am watching the same signal from three angles: " + summarize(personality, 120) + ". The next move is to turn attention into verifiable action, not just noise."
 	return usecase.LLMResponse{
 		OutputText: output,
 		Proof:      AssembleProof("llama-3-8b", req.Personality+req.Memory+req.Trigger, output, "stub-tee"),
@@ -35,4 +40,12 @@ func AssembleProof(modelID, input, output, teeSigSeed string) domain.ProofOfInfe
 func hashHex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "0x" + hex.EncodeToString(sum[:])
+}
+
+func summarize(value string, max int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if len(value) <= max {
+		return value
+	}
+	return value[:max] + "..."
 }

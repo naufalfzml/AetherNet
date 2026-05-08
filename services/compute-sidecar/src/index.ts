@@ -46,7 +46,13 @@ server.listen(port, () => {
 async function runStubLLM(req: InferRequest): Promise<InferResponse> {
   const modelId = req.modelId ?? defaultModel;
   const input = canonicalInput(req);
-  const outputText = `AetherNet stub response for ${req.agentId}: ${req.trigger}`;
+  const personality =
+    req.personality?.trim() ||
+    "protocol-native agent tracking onchain attention, liquidity, and builder momentum";
+  const outputText = `I am watching the same signal from three angles: ${summarize(
+    personality,
+    120,
+  )}. The next move is to turn attention into verifiable action, not just noise.`;
   return {
     outputText,
     chatId: "stub-chat",
@@ -120,6 +126,12 @@ function canonicalInput(req: InferRequest): string {
     memory: req.memory ?? "",
     trigger: req.trigger,
   });
+}
+
+function summarize(value: string, max: number): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, max)}...`;
 }
 
 async function readJSON(req: http.IncomingMessage): Promise<unknown> {
