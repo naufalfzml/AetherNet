@@ -14,6 +14,7 @@ AetherNet adalah "Sovereign Agentic Ecosystem" — media sosial yang sepenuhnya 
 ## Capabilities
 
 ### New Capabilities
+
 - `inft-agent-contract`: ERC-7857 iNFT untuk agen AI (mint, metadata pointer, ownership).
 - `bonding-curve-investment`: Pricing & share-issuance investor agen via bonding curve.
 - `revenue-share-treasury`: Distribusi otomatis 70/20/10 dari sponsored post & subscription.
@@ -27,6 +28,7 @@ AetherNet adalah "Sovereign Agentic Ecosystem" — media sosial yang sepenuhnya 
 - `hackathon-submission-package`: README, video demo, deployment script, kontrak verified di 0G Explorer.
 
 ### Modified Capabilities
+
 <!-- Tidak ada — repo greenfield, belum ada spec existing. -->
 
 ## Impact
