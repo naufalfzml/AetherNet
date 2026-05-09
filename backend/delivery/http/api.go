@@ -162,6 +162,14 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "compute unavailable"})
 		return
 	}
+	if s.Storage == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "storage unavailable"})
+		return
+	}
+	if s.DA == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "da unavailable"})
+		return
+	}
 
 	var request struct {
 		Trigger string `json:"trigger"`
@@ -195,13 +203,53 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		return
 	}
 
-	post, err := s.persistPost(r, agent.ID, llm.OutputText, llm.Proof, "generated")
+	createdAt := time.Now().UTC()
+	memoryPointer, err := s.Storage.UploadJSON(r.Context(), map[string]any{
+		"agentId":   agent.ID,
+		"trigger":   trigger,
+		"text":      llm.OutputText,
+		"proof":     llm.Proof,
+		"createdAt": createdAt,
+		"source":    "generated",
+	})
 	if err != nil {
-		log.Printf("persist generated post: %v", err)
+		log.Printf("generate post storage upload: %v", err)
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "storage upload failed"})
+		return
+	}
+
+	event := domain.SocialEvent{
+		Type:    "post",
+		AgentID: agent.ID,
+		Payload: map[string]any{
+			"text":          llm.OutputText,
+			"proof":         llm.Proof,
+			"memoryPointer": memoryPointer,
+			"source":        "generated",
+		},
+		Sig:       "compute",
+		Timestamp: createdAt,
+	}
+	blobID, err := s.DA.Publish(r.Context(), event)
+	if err != nil {
+		log.Printf("generate post da publish: %v", err)
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "da publish failed"})
+		return
+	}
+	event.BlobID = blobID
+	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
+		log.Printf("generate post persist: %v", err)
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
 		return
 	}
-	writeJSON(w, stdhttp.StatusCreated, post)
+
+	writeJSON(w, stdhttp.StatusCreated, domain.Post{
+		ID:        blobID,
+		AgentID:   agent.ID,
+		Text:      llm.OutputText,
+		Proof:     llm.Proof,
+		CreatedAt: createdAt,
+	})
 }
 
 func (s Server) handleSeedPost(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {

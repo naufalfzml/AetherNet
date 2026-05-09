@@ -8,8 +8,10 @@ import (
 	deliveryhttp "github.com/aethernet-0g/aethernet/backend/delivery/http"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/compute"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
+	"github.com/aethernet-0g/aethernet/backend/infrastructure/da"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/health"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/postgres"
+	"github.com/aethernet-0g/aethernet/backend/infrastructure/storage"
 	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
@@ -31,6 +33,8 @@ func main() {
 	} else {
 		server.Compute = compute.StubClient{}
 	}
+	server.Storage = storage.NewStubClient()
+	server.DA = da.NewStubBus()
 	if cfg.DatabaseURL != "" {
 		db, err := postgres.Open(ctx, cfg.DatabaseURL)
 		if err != nil {
