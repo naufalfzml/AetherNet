@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -172,7 +173,9 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 	}
 
 	var request struct {
-		Trigger string `json:"trigger"`
+		Trigger     string `json:"trigger"`
+		WithImage   bool   `json:"withImage"`
+		ImagePrompt string `json:"imagePrompt"`
 	}
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&request)
@@ -218,15 +221,65 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		return
 	}
 
+	var imageRef string
+	var imageProof *domain.ProofOfInference
+	var imageTEEVerified bool
+	if request.WithImage {
+		imagePrompt := strings.TrimSpace(request.ImagePrompt)
+		if imagePrompt == "" {
+			imagePrompt = buildImagePrompt(personality, llm.OutputText)
+		}
+		image, err := s.Compute.RunImageGen(r.Context(), usecase.ImageRequest{
+			AgentID:     agent.ID,
+			Personality: personality,
+			Prompt:      imagePrompt,
+		})
+		if err != nil {
+			log.Printf("generate post image: %v", err)
+			writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image generation failed"})
+			return
+		}
+		if image.ImageBase64 != "" {
+			imageBytes, err := base64.StdEncoding.DecodeString(image.ImageBase64)
+			if err != nil {
+				log.Printf("generate post decode image: %v", err)
+				writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image decode failed"})
+				return
+			}
+			contentType := image.ContentType
+			if contentType == "" {
+				contentType = "image/jpeg"
+			}
+			pointer, err := s.Storage.UploadBytes(r.Context(), contentType, imageBytes)
+			if err != nil {
+				log.Printf("generate post upload image: %v", err)
+				writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image upload failed"})
+				return
+			}
+			imageRef = pointer
+			proof := image.Proof
+			imageProof = &proof
+			imageTEEVerified = image.TEEVerified
+		}
+	}
+
+	payload := map[string]any{
+		"text":          llm.OutputText,
+		"proof":         llm.Proof,
+		"memoryPointer": memoryPointer,
+		"source":        "generated",
+	}
+	if imageRef != "" {
+		payload["imageRef"] = imageRef
+		if imageProof != nil {
+			payload["imageProof"] = imageProof
+		}
+		payload["imageTeeVerified"] = imageTEEVerified
+	}
 	event := domain.SocialEvent{
-		Type:    "post",
-		AgentID: agent.ID,
-		Payload: map[string]any{
-			"text":          llm.OutputText,
-			"proof":         llm.Proof,
-			"memoryPointer": memoryPointer,
-			"source":        "generated",
-		},
+		Type:      "post",
+		AgentID:   agent.ID,
+		Payload:   payload,
 		Sig:       "compute",
 		Timestamp: createdAt,
 	}
@@ -248,6 +301,7 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		AgentID:   agent.ID,
 		Text:      llm.OutputText,
 		Proof:     llm.Proof,
+		ImageRef:  imageRef,
 		CreatedAt: createdAt,
 	})
 }
@@ -541,6 +595,18 @@ func newStubMetadataPointer() (string, error) {
 		return "", err
 	}
 	return "stub://metadata/" + hex.EncodeToString(bytes[:]), nil
+}
+
+func buildImagePrompt(personality, postText string) string {
+	persona := summarizePrompt(personality)
+	if persona == "" {
+		persona = "AI agent on a decentralized social feed"
+	}
+	post := strings.Join(strings.Fields(postText), " ")
+	if len(post) > 200 {
+		post = post[:200] + "..."
+	}
+	return "Editorial illustration for a social post by " + persona + ". Visualize: " + post
 }
 
 func summarizePrompt(prompt string) string {
