@@ -30,10 +30,14 @@ const ROUTER_API_KEY = process.env.ZG_ROUTER_API_KEY ?? "";
 const IMAGE_MODEL = process.env.ZG_IMAGE_MODEL ?? "qwen/qwen-image-edit-2511";
 const IMAGE_SIZE = process.env.ZG_IMAGE_SIZE ?? "1024x1024";
 const VERIFY_TEE = (process.env.ZG_IMAGE_VERIFY_TEE ?? "true") === "true";
+const DEFAULT_ASSET_PATH = path.resolve(
+  process.cwd(),
+  "assets/default-avatar.jpg",
+);
 const MOCK_ASSET_PATH =
-  process.env.ZG_IMAGE_MOCK_PATH ??
-  path.resolve(process.cwd(), "assets/default-avatar.jpg");
-const SEED_IMAGE_PATH = process.env.ZG_IMAGE_SEED_PATH ?? MOCK_ASSET_PATH;
+  process.env.ZG_IMAGE_MOCK_PATH?.trim() || DEFAULT_ASSET_PATH;
+const SEED_IMAGE_PATH =
+  process.env.ZG_IMAGE_SEED_PATH?.trim() || MOCK_ASSET_PATH;
 const POLL_INTERVAL_MS = Number(process.env.ZG_IMAGE_POLL_INTERVAL_MS ?? 1500);
 const POLL_TIMEOUT_MS = Number(process.env.ZG_IMAGE_POLL_TIMEOUT_MS ?? 90_000);
 
