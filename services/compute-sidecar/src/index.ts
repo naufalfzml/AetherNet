@@ -1,5 +1,6 @@
 import http from "node:http";
 import { deterministicStubProof, type ProofOfInference } from "./proof.js";
+import { imageMode, runImageGen, type ImageRequest } from "./image.js";
 
 type LLMRequest = {
   agentId: string;
@@ -34,6 +35,7 @@ const server = http.createServer(async (req, res) => {
         status: "ok",
         stubMode: STUB_MODE,
         chatModel: CHAT_MODEL,
+        imageMode: imageMode(),
       });
     }
     if (req.method === "POST" && req.url === "/infer/llm") {
@@ -41,6 +43,11 @@ const server = http.createServer(async (req, res) => {
       const response = STUB_MODE
         ? await runStubLLM(body)
         : await runRouterLLM(body);
+      return json(res, 200, response);
+    }
+    if (req.method === "POST" && req.url === "/infer/image") {
+      const body = (await readJSON(req)) as ImageRequest;
+      const response = await runImageGen(body);
       return json(res, 200, response);
     }
     return json(res, 404, { error: "not found" });
