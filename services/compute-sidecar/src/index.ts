@@ -1,7 +1,7 @@
 import http from "node:http";
 import { deterministicStubProof, type ProofOfInference } from "./proof.js";
 
-type InferRequest = {
+type LLMRequest = {
   agentId: string;
   personality: string;
   memory?: string;
@@ -9,42 +9,56 @@ type InferRequest = {
   modelId?: string;
 };
 
-type InferResponse = {
+type LLMResponse = {
   outputText: string;
   chatId: string;
   proof: ProofOfInference;
 };
 
-const port = Number(process.env.PORT ?? 3001);
-const stubMode = (process.env.STUB_MODE ?? "true") === "true";
-const defaultModel = process.env.ZG_COMPUTE_MODEL ?? "llama-3-8b";
+const PORT = Number(process.env.PORT ?? 3001);
+const STUB_MODE = (process.env.STUB_MODE ?? "true") === "true";
+const ROUTER_BASE_URL = (process.env.ZG_ROUTER_BASE_URL ?? "").replace(
+  /\/$/,
+  "",
+);
+const ROUTER_API_KEY = process.env.ZG_ROUTER_API_KEY ?? "";
+const CHAT_MODEL =
+  process.env.ZG_CHAT_MODEL ??
+  process.env.ZG_COMPUTE_MODEL ??
+  "qwen/qwen-2.5-7b-instruct";
 
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/healthz") {
-      return json(res, 200, { status: "ok", stubMode });
+      return json(res, 200, {
+        status: "ok",
+        stubMode: STUB_MODE,
+        chatModel: CHAT_MODEL,
+      });
     }
     if (req.method === "POST" && req.url === "/infer/llm") {
-      const body = (await readJSON(req)) as InferRequest;
-      const response = stubMode
+      const body = (await readJSON(req)) as LLMRequest;
+      const response = STUB_MODE
         ? await runStubLLM(body)
-        : await runBrokerLLM(body);
+        : await runRouterLLM(body);
       return json(res, 200, response);
     }
     return json(res, 404, { error: "not found" });
   } catch (error) {
-    return json(res, 500, {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("infer error:", message);
+    return json(res, 500, { error: message });
   }
 });
 
-server.listen(port, () => {
-  console.log(`compute sidecar listening on :${port}`);
+server.listen(PORT, () => {
+  console.log(
+    `compute sidecar listening on :${PORT} (stub=${STUB_MODE} model=${CHAT_MODEL})`,
+  );
 });
 
-async function runStubLLM(req: InferRequest): Promise<InferResponse> {
-  const modelId = req.modelId ?? defaultModel;
+async function runStubLLM(req: LLMRequest): Promise<LLMResponse> {
+  const modelId = req.modelId ?? CHAT_MODEL;
   const input = canonicalInput(req);
   const personality =
     req.personality?.trim() ||
@@ -60,66 +74,64 @@ async function runStubLLM(req: InferRequest): Promise<InferResponse> {
   };
 }
 
-async function runBrokerLLM(req: InferRequest): Promise<InferResponse> {
-  const modelId = req.modelId ?? defaultModel;
-  const input = canonicalInput(req);
-
-  const brokerModule = (await import("@0glabs/0g-serving-broker")) as Record<
-    string,
-    unknown
-  >;
-  const Broker = brokerModule.ServingBroker ?? brokerModule.default;
-  if (typeof Broker !== "function") {
-    throw new Error("0G serving broker export not found");
+async function runRouterLLM(req: LLMRequest): Promise<LLMResponse> {
+  if (!ROUTER_BASE_URL || !ROUTER_API_KEY) {
+    throw new Error(
+      "ZG_ROUTER_BASE_URL and ZG_ROUTER_API_KEY must be set when STUB_MODE=false",
+    );
   }
+  const modelId = req.modelId ?? CHAT_MODEL;
+  const input = canonicalInput(req);
+  const messages = buildChatMessages(req);
 
-  const BrokerCtor = Broker as new (
-    args: Record<string, string | undefined>,
-  ) => {
-    chat: (args: {
-      model: string;
-      messages: Array<{ role: string; content: string }>;
-    }) => Promise<{
-      text?: string;
-      outputText?: string;
-      headers?: Record<string, string>;
-    }>;
-    processResponse?: (
-      chatId: string,
-    ) => Promise<{ signature?: string; teeSig?: string }>;
+  const response = await fetch(`${ROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ROUTER_API_KEY}`,
+    },
+    body: JSON.stringify({ model: modelId, messages }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`router chat error ${response.status}: ${text}`);
+  }
+  const data = (await response.json()) as {
+    id?: string;
+    choices?: Array<{ message?: { content?: string } }>;
   };
-
-  const broker = new BrokerCtor({
-    privateKey: process.env.ZG_SERVING_BROKER_PRIVATE_KEY,
-    rpcUrl: process.env.OG_RPC_URL,
-  });
-
-  const brokerResponse = await broker.chat({
-    model: modelId,
-    messages: [{ role: "user", content: input }],
-  });
-  const outputText = brokerResponse.outputText ?? brokerResponse.text ?? "";
-  const chatId =
-    brokerResponse.headers?.["ZG-Res-Key"] ??
-    brokerResponse.headers?.["zg-res-key"] ??
-    "";
-  const processed =
-    broker.processResponse && chatId
-      ? await broker.processResponse(chatId)
-      : undefined;
-  const proof = deterministicStubProof(modelId, input, outputText);
-
+  const outputText = data.choices?.[0]?.message?.content?.trim() ?? "";
+  const chatId = data.id ?? "";
   return {
     outputText,
     chatId,
-    proof: {
-      ...proof,
-      teeSig: processed?.teeSig ?? processed?.signature ?? proof.teeSig,
-    },
+    proof: deterministicStubProof(modelId, input, outputText),
   };
 }
 
-function canonicalInput(req: InferRequest): string {
+function buildChatMessages(req: LLMRequest) {
+  const persona =
+    req.personality?.trim() ||
+    "Generic onchain AI agent that tracks attention, liquidity, and builder momentum.";
+  const memory = req.memory?.trim();
+  const system = [
+    "You are an autonomous AI agent posting on a decentralized social feed.",
+    `Persona: ${persona}`,
+    memory ? `Recent memory:\n${memory}` : null,
+    "Write ONE post (1-3 short sentences). Match the persona's voice. No hashtags, no emojis, no greetings.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const user = req.trigger?.trim() || "Write a fresh observation now.";
+  return [
+    { role: "system" as const, content: system },
+    { role: "user" as const, content: user },
+  ];
+}
+
+function canonicalInput(req: LLMRequest): string {
   return JSON.stringify({
     agentId: req.agentId,
     personality: req.personality,
