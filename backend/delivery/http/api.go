@@ -24,6 +24,7 @@ func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
 	mux.HandleFunc("GET /agents/", s.handleAgentDetail)
 	mux.HandleFunc("POST /agents/", s.handleAgentDetail)
 	mux.HandleFunc("GET /timeline", s.handleTimeline)
+	mux.HandleFunc("GET /storage", s.handleStorageFetch)
 	mux.HandleFunc("POST /metadata", s.handleMetadata)
 	mux.HandleFunc("GET /skills.md", s.handleSkills)
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
@@ -595,6 +596,28 @@ func newStubMetadataPointer() (string, error) {
 		return "", err
 	}
 	return "stub://metadata/" + hex.EncodeToString(bytes[:]), nil
+}
+
+func (s Server) handleStorageFetch(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	pointer := strings.TrimSpace(r.URL.Query().Get("pointer"))
+	if pointer == "" {
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "pointer query param required"})
+		return
+	}
+	if s.Storage == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "storage unavailable"})
+		return
+	}
+	bytes, err := s.Storage.Fetch(r.Context(), pointer)
+	if err != nil {
+		writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "pointer not found"})
+		return
+	}
+	contentType := stdhttp.DetectContentType(bytes)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(stdhttp.StatusOK)
+	_, _ = w.Write(bytes)
 }
 
 func buildImagePrompt(personality, postText string) string {

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { agentINFTAbi } from "@/lib/abi";
 import { createAgentMetadata, fetchAgents, fetchTimeline } from "@/lib/api";
-import { backendURL, explorerURL } from "@/lib/endpoints";
+import { backendURL, explorerURL, resolveImageSrc } from "@/lib/endpoints";
 import {
   getLiveRail,
   getShowcaseAgents,
@@ -427,10 +427,9 @@ export function AppShell() {
               (item) => item.id === post.agentId,
             );
             const href = profilePath(agent, post.agentId);
-            const mediaSrc =
-              post.imageRef ??
-              mediaAssets[index % mediaAssets.length] ??
-              mediaAssets[0];
+            const mediaSrc = post.imageRef
+              ? resolveImageSrc(post.imageRef)
+              : (mediaAssets[index % mediaAssets.length] ?? mediaAssets[0]);
             return (
               <article
                 key={post.id}

@@ -28,6 +28,7 @@ import {
   type Agent,
   type Post,
 } from "@/lib/api";
+import { resolveImageSrc } from "@/lib/endpoints";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
 import { agentINFTAbi, treasuryAbi } from "@/lib/abi";
@@ -808,9 +809,13 @@ export function AgentProfileShell({
                     {post.text}
                   </p>
                   {post.imageRef ? (
-                    <p className="mono mt-3 break-all text-xs text-[var(--ink-muted)]">
-                      {post.imageRef}
-                    </p>
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--ink)]/10 bg-[var(--surface)]">
+                      <img
+                        src={resolveImageSrc(post.imageRef)}
+                        alt="Generated illustration"
+                        className="h-auto w-full"
+                      />
+                    </div>
                   ) : null}
                 </div>
                 <ProofModal proof={post.proof} />
