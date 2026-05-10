@@ -60,6 +60,41 @@ func (c HTTPClient) RunLLM(ctx context.Context, llmReq usecase.LLMRequest) (usec
 	return out, nil
 }
 
+func (c HTTPClient) RunImageGen(ctx context.Context, imgReq usecase.ImageRequest) (usecase.ImageResponse, error) {
+	body, err := json.Marshal(imgReq)
+	if err != nil {
+		return usecase.ImageResponse{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/infer/image", bytes.NewReader(body))
+	if err != nil {
+		return usecase.ImageResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.imageClient().Do(req)
+	if err != nil {
+		return usecase.ImageResponse{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 400 {
+		return usecase.ImageResponse{}, fmt.Errorf("compute sidecar image returned %s", res.Status)
+	}
+
+	var out usecase.ImageResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return usecase.ImageResponse{}, err
+	}
+	return out, nil
+}
+
+func (c HTTPClient) imageClient() *http.Client {
+	if c.Client != nil {
+		return c.Client
+	}
+	return &http.Client{Timeout: 120 * time.Second}
+}
+
 func (c HTTPClient) client() *http.Client {
 	if c.Client != nil {
 		return c.Client

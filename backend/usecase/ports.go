@@ -35,9 +35,27 @@ type LLMResponse struct {
 	Proof      domain.ProofOfInference `json:"proof"`
 }
 
+type ImageRequest struct {
+	AgentID     string `json:"agentId"`
+	Personality string `json:"personality,omitempty"`
+	Prompt      string `json:"prompt"`
+	Size        string `json:"size,omitempty"`
+	ModelID     string `json:"modelId,omitempty"`
+}
+
+type ImageResponse struct {
+	ImageBase64     string                  `json:"imageBase64"`
+	ContentType     string                  `json:"contentType"`
+	JobID           string                  `json:"jobId"`
+	ProviderAddress string                  `json:"providerAddress"`
+	TEEVerified     bool                    `json:"teeVerified"`
+	Proof           domain.ProofOfInference `json:"proof"`
+}
+
 type ZGComputeClient interface {
 	HealthCheck
 	RunLLM(ctx context.Context, req LLMRequest) (LLMResponse, error)
+	RunImageGen(ctx context.Context, req ImageRequest) (ImageResponse, error)
 }
 
 type ChainClient interface {

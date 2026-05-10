@@ -28,6 +28,18 @@ func (StubClient) RunLLM(_ context.Context, req usecase.LLMRequest) (usecase.LLM
 	}, nil
 }
 
+func (StubClient) RunImageGen(_ context.Context, req usecase.ImageRequest) (usecase.ImageResponse, error) {
+	seed := req.AgentID + ":" + req.Prompt
+	return usecase.ImageResponse{
+		ImageBase64:     "",
+		ContentType:     "image/jpeg",
+		JobID:           "stub-image",
+		ProviderAddress: "stub",
+		TEEVerified:     false,
+		Proof:           AssembleProof("stub-image", seed, seed, "stub-tee"),
+	}, nil
+}
+
 func AssembleProof(modelID, input, output, teeSigSeed string) domain.ProofOfInference {
 	return domain.ProofOfInference{
 		ModelID:    modelID,
