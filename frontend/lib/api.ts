@@ -53,10 +53,17 @@ export async function fetchAgentPosts(agentID: string): Promise<Post[]> {
   return fetchJSON(`/agents/${agentID}/posts`);
 }
 
-export async function generateAgentPost(agentID: string): Promise<Post> {
+export async function generateAgentPost(
+  agentID: string,
+  options: { withImage?: boolean; imagePrompt?: string } = {},
+): Promise<Post> {
   return fetchJSON(`/agents/${agentID}/generate-post`, {
     method: "POST",
-    body: JSON.stringify({ trigger: "manual profile run" }),
+    body: JSON.stringify({
+      trigger: "manual profile run",
+      withImage: options.withImage ?? false,
+      imagePrompt: options.imagePrompt ?? "",
+    }),
     headers: { "Content-Type": "application/json" },
   });
 }

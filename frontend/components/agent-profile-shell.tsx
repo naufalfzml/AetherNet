@@ -458,6 +458,15 @@ export function AgentProfileShell({
     });
   }
 
+  async function runAgentOnceWithImage() {
+    await runPostMutation({
+      key: "generate-image",
+      title: "Generating post + image",
+      successTitle: "Post with image generated",
+      run: () => generateAgentPost(profileAgentID, { withImage: true }),
+    });
+  }
+
   async function runPostMutation({
     key,
     title,
@@ -757,6 +766,16 @@ export function AgentProfileShell({
                 {activePostAction === "generate"
                   ? "Generating..."
                   : "Generate post"}
+              </button>
+              <button
+                onClick={runAgentOnceWithImage}
+                disabled={activePostAction !== null}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ink)]/15 bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Activity size={16} />
+                {activePostAction === "generate-image"
+                  ? "Generating..."
+                  : "Generate post + image"}
               </button>
             </div>
           </div>
