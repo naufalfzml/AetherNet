@@ -40,7 +40,39 @@ Validation steps:
       adjust `runRouterImageGenerate` in
       `services/compute-sidecar/src/image.ts` to match.
 
-## 3. Backend & chain
+## 3. Storage sidecar
+
+Update `services/storage-sidecar/.env`:
+
+- [ ] `ZG_EVM_RPC` points at the 0G mainnet RPC.
+- [ ] `ZG_INDEXER_RPC` points at the mainnet indexer (replace the
+      testnet turbo URL).
+- [ ] `ZG_STORAGE_PRIVATE_KEY` is a mainnet wallet funded with OG to
+      pay for upload gas. Can reuse the compute wallet but a dedicated
+      key is recommended.
+
+Validation:
+
+- [ ] `curl http://localhost:3002/healthz` returns
+      `evmRpc: configured`, `indexerRpc: configured`,
+      `privateKey: configured`.
+- [ ] One-shot upload smoke test:
+      `bash
+    payload=$(printf "hello mainnet" | base64)
+    curl -X POST http://localhost:3002/upload \
+      -H "Content-Type: application/json" \
+      -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
+    `
+      Response should contain a real `rootHash` (`0x...`) and a `tx`
+      hash on the mainnet explorer.
+
+Also set in root `.env`:
+
+- [ ] `STORAGE_SIDECAR_URL=http://localhost:3002` (or the production
+      sidecar URL) so the backend uses 0G Storage instead of the
+      in-memory stub.
+
+## 4. Backend & chain
 
 Update root `.env`:
 
