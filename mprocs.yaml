@@ -4,6 +4,8 @@ procs:
     shell: go run ./cmd/server
   compute-sidecar:
     shell: pnpm --filter @aethernet/compute-sidecar dev
+  storage-sidecar:
+    shell: pnpm --filter @aethernet/storage-sidecar dev
   frontend:
     shell: pnpm --filter @aethernet/frontend dev
   indexer:

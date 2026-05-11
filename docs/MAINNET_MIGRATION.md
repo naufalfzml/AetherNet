@@ -40,7 +40,39 @@ Validation steps:
       adjust `runRouterImageGenerate` in
       `services/compute-sidecar/src/image.ts` to match.
 
-## 3. Backend & chain
+## 3. Storage sidecar
+
+Update `services/storage-sidecar/.env`:
+
+- [ ] `ZG_EVM_RPC` points at the 0G mainnet RPC.
+- [ ] `ZG_INDEXER_RPC` points at the mainnet indexer (replace the
+      testnet turbo URL).
+- [ ] `ZG_STORAGE_PRIVATE_KEY` is a mainnet wallet funded with OG to
+      pay for upload gas. Can reuse the compute wallet but a dedicated
+      key is recommended.
+
+Validation:
+
+- [ ] `curl http://localhost:3002/healthz` returns
+      `evmRpc: configured`, `indexerRpc: configured`,
+      `privateKey: configured`.
+- [ ] One-shot upload smoke test:
+      `bash
+  payload=$(printf "hello mainnet" | base64)
+  curl -X POST http://localhost:3002/upload \
+    -H "Content-Type: application/json" \
+    -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
+  `
+      Response should contain a real `rootHash` (`0x...`) and a `tx`
+      hash on the mainnet explorer.
+
+Also set in root `.env`:
+
+- [ ] `STORAGE_SIDECAR_URL=http://localhost:3002` (or the production
+      sidecar URL) so the backend uses 0G Storage instead of the
+      in-memory stub.
+
+## 4. Backend & chain
 
 Update root `.env`:
 
@@ -60,7 +92,7 @@ Frontend `.env` (or hosting env):
 - [ ] `NEXT_PUBLIC_INFT_REGISTRY_ADDRESS`, chain ID, explorer URL
       reflect mainnet.
 
-## 4. Smoke tests on mainnet
+## 5. Smoke tests on mainnet
 
 Run the same end-to-end checks defined in
 `openspec/changes/wire-real-aethernet-flow/tasks.md` section 10, but
@@ -78,7 +110,7 @@ against mainnet:
 - [ ] Investment flow (buy / sell / top-up / claim) targets the indexed
       agent address.
 
-## 5. Cleanup
+## 6. Cleanup
 
 - [ ] Revoke the testnet Router API key once mainnet is live.
 - [ ] Rotate the wallet private keys if any were ever pasted into

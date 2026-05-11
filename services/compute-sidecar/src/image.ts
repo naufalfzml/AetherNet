@@ -62,6 +62,9 @@ async function runMockImage(req: ImageRequest): Promise<ImageResponse> {
   const bytes = await readFile(MOCK_ASSET_PATH);
   const base64 = bytes.toString("base64");
   const contentType = guessContentType(MOCK_ASSET_PATH);
+  console.log(
+    `compute /infer/image ok mode=mock agent=${req.agentId} bytes=${bytes.length}`,
+  );
   return {
     imageBase64: base64,
     contentType,
@@ -128,6 +131,9 @@ async function runRouterImageEdit(req: ImageRequest): Promise<ImageResponse> {
     providerAddress,
     modelId,
   });
+  console.log(
+    `compute /infer/image ok mode=edit agent=${req.agentId} model=${modelId} jobId=${jobId} provider=${providerAddress} teeVerified=${polled.teeVerified}`,
+  );
   return {
     imageBase64: polled.imageBase64,
     contentType: polled.contentType,
@@ -248,6 +254,9 @@ async function runRouterImageGenerate(
   if (!imageBase64) {
     throw new Error("image generate response missing image data");
   }
+  console.log(
+    `compute /infer/image ok mode=generate agent=${req.agentId} model=${modelId} bytes=${imageBase64.length}`,
+  );
   return {
     imageBase64,
     contentType,

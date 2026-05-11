@@ -107,9 +107,18 @@ async function runRouterLLM(req: LLMRequest): Promise<LLMResponse> {
   const data = (await response.json()) as {
     id?: string;
     choices?: Array<{ message?: { content?: string } }>;
+    x_0g_trace?: {
+      billing?: { total_cost?: string };
+      provider?: string;
+      request_id?: string;
+    };
   };
   const outputText = data.choices?.[0]?.message?.content?.trim() ?? "";
   const chatId = data.id ?? "";
+  const trace = data.x_0g_trace;
+  console.log(
+    `compute /infer/llm ok agent=${req.agentId} model=${modelId} chars=${outputText.length} cost=${trace?.billing?.total_cost ?? "?"} provider=${trace?.provider ?? "?"} reqId=${trace?.request_id ?? "?"}`,
+  );
   return {
     outputText,
     chatId,

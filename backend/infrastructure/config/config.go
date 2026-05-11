@@ -18,6 +18,7 @@ type Config struct {
 	IndexerStartBlock    string
 	IndexerConfirmations string
 	ComputeSidecarURL    string
+	StorageSidecarURL    string
 	ImageProvider        string
 	INFTRegistry         string
 	TreasuryFactory      string
@@ -41,6 +42,7 @@ func Load() Config {
 		IndexerStartBlock:    env("INDEXER_START_BLOCK", "0"),
 		IndexerConfirmations: env("INDEXER_CONFIRMATIONS", "2"),
 		ComputeSidecarURL:    env("COMPUTE_SIDECAR_URL", ""),
+		StorageSidecarURL:    env("STORAGE_SIDECAR_URL", ""),
 		ImageProvider:        env("IMAGE_PROVIDER", "none"),
 		INFTRegistry:         env("INFT_REGISTRY_ADDRESS", ""),
 		TreasuryFactory:      env("TREASURY_FACTORY_ADDRESS", ""),
