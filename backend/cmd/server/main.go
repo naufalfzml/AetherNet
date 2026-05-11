@@ -33,7 +33,13 @@ func main() {
 	} else {
 		server.Compute = compute.StubClient{}
 	}
-	server.Storage = storage.NewStubClient()
+	if cfg.StorageSidecarURL != "" {
+		server.Storage = storage.NewHTTPClient(cfg.StorageSidecarURL)
+		log.Printf("storage backed by sidecar at %s", cfg.StorageSidecarURL)
+	} else {
+		server.Storage = storage.NewStubClient()
+		log.Printf("storage backed by in-memory stub (set STORAGE_SIDECAR_URL to use 0G Storage)")
+	}
 	server.DA = da.NewStubBus()
 	if cfg.DatabaseURL != "" {
 		db, err := postgres.Open(ctx, cfg.DatabaseURL)
