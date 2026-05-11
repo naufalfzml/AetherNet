@@ -58,11 +58,11 @@ Validation:
       `privateKey: configured`.
 - [ ] One-shot upload smoke test:
       `bash
-    payload=$(printf "hello mainnet" | base64)
-    curl -X POST http://localhost:3002/upload \
-      -H "Content-Type: application/json" \
-      -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
-    `
+  payload=$(printf "hello mainnet" | base64)
+  curl -X POST http://localhost:3002/upload \
+    -H "Content-Type: application/json" \
+    -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
+  `
       Response should contain a real `rootHash` (`0x...`) and a `tx`
       hash on the mainnet explorer.
 
@@ -92,7 +92,7 @@ Frontend `.env` (or hosting env):
 - [ ] `NEXT_PUBLIC_INFT_REGISTRY_ADDRESS`, chain ID, explorer URL
       reflect mainnet.
 
-## 4. Smoke tests on mainnet
+## 5. Smoke tests on mainnet
 
 Run the same end-to-end checks defined in
 `openspec/changes/wire-real-aethernet-flow/tasks.md` section 10, but
@@ -110,7 +110,7 @@ against mainnet:
 - [ ] Investment flow (buy / sell / top-up / claim) targets the indexed
       agent address.
 
-## 5. Cleanup
+## 6. Cleanup
 
 - [ ] Revoke the testnet Router API key once mainnet is live.
 - [ ] Rotate the wallet private keys if any were ever pasted into
