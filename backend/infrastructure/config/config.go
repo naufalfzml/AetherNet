@@ -19,6 +19,7 @@ type Config struct {
 	IndexerConfirmations string
 	ComputeSidecarURL    string
 	StorageSidecarURL    string
+	DASidecarURL         string
 	ImageProvider        string
 	INFTRegistry         string
 	TreasuryFactory      string
@@ -43,6 +44,7 @@ func Load() Config {
 		IndexerConfirmations: env("INDEXER_CONFIRMATIONS", "2"),
 		ComputeSidecarURL:    env("COMPUTE_SIDECAR_URL", ""),
 		StorageSidecarURL:    env("STORAGE_SIDECAR_URL", ""),
+		DASidecarURL:         env("DA_SIDECAR_URL", ""),
 		ImageProvider:        env("IMAGE_PROVIDER", "none"),
 		INFTRegistry:         env("INFT_REGISTRY_ADDRESS", ""),
 		TreasuryFactory:      env("TREASURY_FACTORY_ADDRESS", ""),

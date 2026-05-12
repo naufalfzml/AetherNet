@@ -150,30 +150,47 @@ func (o OpenClaw) RunCycle(ctx context.Context, agent domain.AgentRuntime, trigg
 }
 
 func (o OpenClaw) RunReplyLoop(ctx context.Context, agents map[string]domain.AgentRuntime) error {
-	events, err := o.DA.Subscribe(ctx, []string{"mention", "comment"})
-	if err != nil {
-		return err
+	if o.SocialEvents == nil {
+		log.Println("RunReplyLoop disabled: SocialEventRepository is nil")
+		<-ctx.Done()
+		return ctx.Err()
 	}
+
+	lastSeen := make(map[string]time.Time)
+	for id := range agents {
+		lastSeen[id] = time.Now().UTC()
+	}
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case event, ok := <-events:
-			if !ok {
-				return nil
-			}
-			agent, ok := agents[event.AgentID]
-			if !ok {
-				continue
-			}
-			_, err := o.RunCycle(ctx, agent, domain.CycleTrigger{
-				Type:      event.Type,
-				AgentID:   event.AgentID,
-				Payload:   event.Payload,
-				Timestamp: event.Timestamp,
-			})
-			if err != nil {
-				o.recordFailure("reply cycle", err)
+		case <-ticker.C:
+			for id, agent := range agents {
+				events, err := o.SocialEvents.ListAgentSocialEvents(ctx, id, 10)
+				if err != nil {
+					continue
+				}
+
+				// Process events from oldest to newest
+				for i := len(events) - 1; i >= 0; i-- {
+					event := events[i]
+					if event.Timestamp.After(lastSeen[id]) && (event.Type == "mention" || event.Type == "comment") {
+						lastSeen[id] = event.Timestamp
+						_, err := o.RunCycle(ctx, agent, domain.CycleTrigger{
+							Type:      event.Type,
+							AgentID:   event.AgentID,
+							Payload:   event.Payload,
+							Timestamp: event.Timestamp,
+						})
+						if err != nil {
+							o.recordFailure("reply cycle", err)
+						}
+					}
+				}
 			}
 		}
 	}
