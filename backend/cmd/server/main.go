@@ -8,7 +8,6 @@ import (
 	deliveryhttp "github.com/aethernet-0g/aethernet/backend/delivery/http"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/compute"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
-	"github.com/aethernet-0g/aethernet/backend/infrastructure/da"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/health"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/postgres"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/storage"
@@ -21,7 +20,6 @@ func main() {
 	staticHealthy := health.StaticClient{Healthy: cfg.StubMode}
 	healthService := usecase.HealthService{
 		Storage: staticHealthy,
-		DA:      staticHealthy,
 		Compute: staticHealthy,
 		Chain:   staticHealthy,
 	}
@@ -40,7 +38,6 @@ func main() {
 		server.Storage = storage.NewStubClient()
 		log.Printf("storage backed by in-memory stub (set STORAGE_SIDECAR_URL to use 0G Storage)")
 	}
-	server.DA = da.NewStubBus()
 	if cfg.DatabaseURL != "" {
 		db, err := postgres.Open(ctx, cfg.DatabaseURL)
 		if err != nil {

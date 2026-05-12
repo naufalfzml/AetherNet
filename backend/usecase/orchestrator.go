@@ -21,7 +21,6 @@ type OpenClaw struct {
 	Agents       AgentProvider
 	Storage      StorageService
 	Compute      ZGComputeClient
-	DA           ZGDAClient
 	Chain        ChainClient
 	SocialEvents SocialEventRepository
 	Metrics      *Metrics

@@ -17,7 +17,6 @@ type Server struct {
 	Metadata usecase.AgentMetadataRepository
 	Compute  usecase.ZGComputeClient
 	Storage  usecase.ZGStorageClient
-	DA       usecase.ZGDAClient
 }
 
 func (s Server) Handler() stdhttp.Handler {

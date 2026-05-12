@@ -168,10 +168,6 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "storage unavailable"})
 		return
 	}
-	if s.DA == nil {
-		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "da unavailable"})
-		return
-	}
 
 	var request struct {
 		Trigger     string `json:"trigger"`
@@ -278,19 +274,13 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		payload["imageTeeVerified"] = imageTEEVerified
 	}
 	event := domain.SocialEvent{
+		BlobID:    fmt.Sprintf("hybrid-%s-%d", agent.ID, time.Now().UnixNano()),
 		Type:      "post",
 		AgentID:   agent.ID,
 		Payload:   payload,
 		Sig:       "compute",
 		Timestamp: createdAt,
 	}
-	blobID, err := s.DA.Publish(r.Context(), event)
-	if err != nil {
-		log.Printf("generate post da publish: %v", err)
-		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "da publish failed"})
-		return
-	}
-	event.BlobID = blobID
 	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
 		log.Printf("generate post persist: %v", err)
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
@@ -298,7 +288,7 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 	}
 
 	writeJSON(w, stdhttp.StatusCreated, domain.Post{
-		ID:        blobID,
+		ID:        event.BlobID,
 		AgentID:   agent.ID,
 		Text:      llm.OutputText,
 		Proof:     llm.Proof,

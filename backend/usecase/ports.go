@@ -17,12 +17,6 @@ type ZGStorageClient interface {
 	Fetch(ctx context.Context, pointer string) ([]byte, error)
 }
 
-type ZGDAClient interface {
-	HealthCheck
-	Publish(ctx context.Context, event domain.SocialEvent) (string, error)
-	Subscribe(ctx context.Context, eventTypes []string) (<-chan domain.SocialEvent, error)
-}
-
 type LLMRequest struct {
 	AgentID     string `json:"agentId"`
 	Personality string `json:"personality"`
