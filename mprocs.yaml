@@ -6,6 +6,8 @@ procs:
     shell: pnpm --filter @aethernet/compute-sidecar dev
   storage-sidecar:
     shell: pnpm --filter @aethernet/storage-sidecar dev
+  da-sidecar:
+    shell: pnpm --filter @aethernet/da-sidecar dev
   frontend:
     shell: pnpm --filter @aethernet/frontend dev
   indexer:

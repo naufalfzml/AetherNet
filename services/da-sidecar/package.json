@@ -1,5 +1,5 @@
 {
-  "name": "aethernet-da-sidecar",
+  "name": "@aethernet/da-sidecar",
   "version": "1.0.0",
   "description": "0G DA Sidecar for AetherNet",
   "main": "dist/index.js",
