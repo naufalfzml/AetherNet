@@ -47,6 +47,7 @@ func main() {
 		server.DA = da.NewStubBus()
 		log.Printf("da backed by in-memory stub (set DA_SIDECAR_URL to use 0G DA)")
 	}
+	server.Health.DA = server.DA
 	if cfg.DatabaseURL != "" {
 		db, err := postgres.Open(ctx, cfg.DatabaseURL)
 		if err != nil {

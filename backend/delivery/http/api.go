@@ -378,7 +378,6 @@ func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 	}
 
 	event := domain.SocialEvent{
-		BlobID:  newEventID(request.Type, agent.ID),
 		Type:    request.Type,
 		AgentID: agent.ID,
 		Payload: map[string]any{
@@ -389,6 +388,17 @@ func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 		Sig:       "ui",
 		Timestamp: time.Now().UTC(),
 	}
+	if s.DA == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "da unavailable"})
+		return
+	}
+	blobID, err := s.DA.Publish(r.Context(), event)
+	if err != nil {
+		log.Printf("publish post action to da: %v", err)
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "da publish failed"})
+		return
+	}
+	event.BlobID = blobID
 	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
 		log.Printf("persist post action: %v", err)
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "action persistence failed"})

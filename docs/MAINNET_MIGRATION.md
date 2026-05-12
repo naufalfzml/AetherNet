@@ -58,11 +58,11 @@ Validation:
       `privateKey: configured`.
 - [ ] One-shot upload smoke test:
       `bash
-  payload=$(printf "hello mainnet" | base64)
-  curl -X POST http://localhost:3002/upload \
-    -H "Content-Type: application/json" \
-    -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
-  `
+payload=$(printf "hello mainnet" | base64)
+curl -X POST http://localhost:3002/upload \
+  -H "Content-Type: application/json" \
+  -d "{\"contentType\":\"text/plain\",\"base64\":\"$payload\"}"
+`
       Response should contain a real `rootHash` (`0x...`) and a `tx`
       hash on the mainnet explorer.
 
@@ -72,7 +72,30 @@ Also set in root `.env`:
       sidecar URL) so the backend uses 0G Storage instead of the
       in-memory stub.
 
-## 4. Backend & chain
+## 4. DA sidecar
+
+Update `services/da-sidecar/.env`:
+
+- [ ] `ZG_DA_DISPERSER_RPC` points at the current 0G DA mainnet
+      disperser endpoint from official 0G/operator docs.
+- [ ] `ZG_DA_RETRIEVER_RPC` points at the matching mainnet retriever
+      endpoint.
+- [ ] `ZG_DA_QUORUM_ID` matches the mainnet quorum/operator guidance.
+
+Also set in root `.env`:
+
+- [ ] `DA_SIDECAR_URL=http://localhost:3003` (or the production sidecar
+      URL) so the backend publishes social events to 0G DA instead of
+      the in-memory stub.
+
+Validation:
+
+- [ ] `curl http://localhost:3003/healthz` returns the configured DA
+      disperser and retriever RPCs.
+- [ ] Creating a post action returns a DA blob ID in the response and
+      persists the same blob ID to Postgres.
+
+## 5. Backend & chain
 
 Update root `.env`:
 
@@ -92,7 +115,7 @@ Frontend `.env` (or hosting env):
 - [ ] `NEXT_PUBLIC_INFT_REGISTRY_ADDRESS`, chain ID, explorer URL
       reflect mainnet.
 
-## 5. Smoke tests on mainnet
+## 6. Smoke tests on mainnet
 
 Run the same end-to-end checks defined in
 `openspec/changes/wire-real-aethernet-flow/tasks.md` section 10, but
@@ -110,7 +133,7 @@ against mainnet:
 - [ ] Investment flow (buy / sell / top-up / claim) targets the indexed
       agent address.
 
-## 6. Cleanup
+## 7. Cleanup
 
 - [ ] Revoke the testnet Router API key once mainnet is live.
 - [ ] Rotate the wallet private keys if any were ever pasted into

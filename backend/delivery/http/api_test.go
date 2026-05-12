@@ -58,6 +58,10 @@ type fakeEventRepo struct {
 	posts    map[string][]domain.Post
 }
 
+type fakeCapturingEventRepo struct {
+	event domain.SocialEvent
+}
+
 type fakeMetadataRepo struct {
 	metadata domain.AgentMetadata
 }
@@ -88,6 +92,49 @@ func (r fakeEventRepo) ListAgentPosts(_ context.Context, agentID string, _ int) 
 
 func (r fakeEventRepo) ListAgentSocialEvents(context.Context, string, int) ([]domain.SocialEvent, error) {
 	return nil, nil
+}
+
+func (r *fakeCapturingEventRepo) UpsertSocialEvent(_ context.Context, event domain.SocialEvent) error {
+	r.event = event
+	return nil
+}
+
+func (r *fakeCapturingEventRepo) ListTimeline(context.Context, int) ([]domain.Post, error) {
+	return nil, nil
+}
+
+func (r *fakeCapturingEventRepo) ListAgentPosts(context.Context, string, int) ([]domain.Post, error) {
+	return nil, nil
+}
+
+func (r *fakeCapturingEventRepo) ListAgentSocialEvents(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
+type fakeDAClient struct {
+	published domain.SocialEvent
+	blobID    string
+}
+
+func (c *fakeDAClient) Health(context.Context) error {
+	return nil
+}
+
+func (c *fakeDAClient) Publish(_ context.Context, event domain.SocialEvent) (string, error) {
+	c.published = event
+	if c.blobID != "" {
+		return c.blobID, nil
+	}
+	return "0xda-blob", nil
+}
+
+func (c *fakeDAClient) Subscribe(ctx context.Context, _ []string) (<-chan domain.SocialEvent, error) {
+	ch := make(chan domain.SocialEvent)
+	go func() {
+		<-ctx.Done()
+		close(ch)
+	}()
+	return ch, nil
 }
 
 func TestAgentsEndpointUsesRepository(t *testing.T) {
@@ -217,5 +264,38 @@ func TestMetadataEndpointStoresPromptAndSummary(t *testing.T) {
 	}
 	if !strings.HasPrefix(repo.metadata.MetadataPointer, "stub://metadata/") {
 		t.Fatalf("expected stub metadata pointer, got %q", repo.metadata.MetadataPointer)
+	}
+}
+
+func TestPostActionPublishesToDAAndPersistsBlobID(t *testing.T) {
+	events := &fakeCapturingEventRepo{}
+	da := &fakeDAClient{blobID: "0xabc:1:2"}
+	server := Server{
+		Config: config.Config{StubMode: false},
+		Agents: fakeAgentRepo{agents: []domain.Agent{{
+			ID:           "agent-1",
+			TokenID:      "1",
+			AgentAddress: "0x6f1330f207Ab5e2a52c550AF308bA28e3c517311",
+		}}},
+		Events: events,
+		DA:     da,
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		stdhttp.MethodPost,
+		"/agents/agent-1/posts/post-1/actions",
+		strings.NewReader(`{"type":"comment","actorAddress":"0xactor","text":"ship it"}`),
+	)
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if da.published.Type != "comment" || da.published.AgentID != "agent-1" {
+		t.Fatalf("expected DA publish for comment action, got %#v", da.published)
+	}
+	if events.event.BlobID != "0xabc:1:2" {
+		t.Fatalf("expected persisted DA blob id, got %q", events.event.BlobID)
 	}
 }
