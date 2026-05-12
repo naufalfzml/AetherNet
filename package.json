@@ -6,7 +6,9 @@
   "scripts": {
     "prepare": "husky",
     "setup": "bash scripts/setup.sh",
-    "dev": "mprocs",
+    "dev": "concurrently --names backend,indexer,frontend,compute,storage --prefix-colors blue,magenta,green,yellow,cyan --kill-others-on-fail \"cd backend && go run ./cmd/server\" \"cd backend && go run ./cmd/indexer\" \"pnpm --filter @aethernet/frontend dev\" \"pnpm --filter @aethernet/compute-sidecar dev\" \"pnpm --filter @aethernet/storage-sidecar dev\"",
+    "dev:core": "concurrently --names backend,frontend --prefix-colors blue,green --kill-others-on-fail \"cd backend && go run ./cmd/server\" \"pnpm --filter @aethernet/frontend dev\"",
+    "dev:mprocs": "mprocs",
     "test": "bash scripts/test-all.sh",
     "lint-staged": "lint-staged",
     "format": "prettier --write \"**/*.{md,json,yaml,yml,css,ts,tsx}\"",
@@ -16,6 +18,7 @@
     "seed:agents": "bash scripts/seed-agents.sh"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "prettier": "^3.5.3"
