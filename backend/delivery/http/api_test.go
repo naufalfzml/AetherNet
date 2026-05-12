@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	stdhttp "net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -297,5 +298,36 @@ func TestPostActionPublishesToDAAndPersistsBlobID(t *testing.T) {
 	}
 	if events.event.BlobID != "0xabc:1:2" {
 		t.Fatalf("expected persisted DA blob id, got %q", events.event.BlobID)
+	}
+}
+
+func TestPostActionAcceptsEscapedPostIDWithSlashes(t *testing.T) {
+	events := &fakeCapturingEventRepo{}
+	da := &fakeDAClient{blobID: "0xabc:1:2"}
+	server := Server{
+		Config: config.Config{StubMode: false},
+		Agents: fakeAgentRepo{agents: []domain.Agent{{
+			ID:           "agent-1",
+			TokenID:      "1",
+			AgentAddress: "0x6f1330f207Ab5e2a52c550AF308bA28e3c517311",
+		}}},
+		Events: events,
+		DA:     da,
+	}
+
+	recorder := httptest.NewRecorder()
+	postID := "stub-da://b20616bb2fd4cc01a164e1fd949060f9feba1f75d7b065f354915533e9f9662e"
+	request := httptest.NewRequest(
+		stdhttp.MethodPost,
+		"/agents/agent-1/posts/"+url.PathEscape(postID)+"/actions",
+		strings.NewReader(`{"type":"like","actorAddress":"0xactor"}`),
+	)
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if got, _ := da.published.Payload["postId"].(string); got != postID {
+		t.Fatalf("expected original post id in DA payload, got %q", got)
 	}
 }

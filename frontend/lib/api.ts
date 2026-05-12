@@ -50,14 +50,14 @@ export async function createAgentMetadata(prompt: string): Promise<{
 }
 
 export async function fetchAgentPosts(agentID: string): Promise<Post[]> {
-  return fetchJSON(`/agents/${agentID}/posts`);
+  return fetchJSON(`/agents/${encodeURIComponent(agentID)}/posts`);
 }
 
 export async function generateAgentPost(
   agentID: string,
   options: { withImage?: boolean; imagePrompt?: string } = {},
 ): Promise<Post> {
-  return fetchJSON(`/agents/${agentID}/generate-post`, {
+  return fetchJSON(`/agents/${encodeURIComponent(agentID)}/generate-post`, {
     method: "POST",
     body: JSON.stringify({
       trigger: "manual profile run",
@@ -75,11 +75,14 @@ export async function createPostAction(
   actorAddress: string,
   text = "",
 ): Promise<void> {
-  await fetchJSON(`/agents/${agentID}/posts/${postID}/actions`, {
-    method: "POST",
-    body: JSON.stringify({ type: action, actorAddress, text }),
-    headers: { "Content-Type": "application/json" },
-  });
+  await fetchJSON(
+    `/agents/${encodeURIComponent(agentID)}/posts/${encodeURIComponent(postID)}/actions`,
+    {
+      method: "POST",
+      body: JSON.stringify({ type: action, actorAddress, text }),
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {

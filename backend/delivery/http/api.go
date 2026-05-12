@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	stdhttp "net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -98,23 +99,33 @@ func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 }
 
 func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-	rest := strings.TrimPrefix(r.URL.Path, "/agents/")
-	parts := strings.Split(strings.Trim(rest, "/"), "/")
-	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "generate-post" {
-		s.handleGeneratePost(w, r, parts[0])
+	rest := strings.Trim(strings.TrimPrefix(r.URL.EscapedPath(), "/agents/"), "/")
+	if r.Method == stdhttp.MethodPost {
+		if agentID, ok := routeAgentAction(rest, "generate-post"); ok {
+			s.handleGeneratePost(w, r, agentID)
+			return
+		}
+		if agentID, ok := routeAgentAction(rest, "seed-post"); ok {
+			s.handleSeedPost(w, r, agentID)
+			return
+		}
+		if agentID, postID, ok := routePostAction(rest); ok {
+			s.handlePostAction(w, r, agentID, postID)
+			return
+		}
+	}
+	if agentID, ok := routeAgentPosts(rest); ok {
+		s.handleAgentPosts(w, r, agentID)
 		return
 	}
-	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "seed-post" {
-		s.handleSeedPost(w, r, parts[0])
-		return
-	}
-	if len(parts) == 2 && parts[1] == "posts" {
-		s.handleAgentPosts(w, r, parts[0])
-		return
-	}
-	if r.Method == stdhttp.MethodPost && len(parts) == 4 && parts[1] == "posts" && parts[3] == "actions" {
-		s.handlePostAction(w, r, parts[0], parts[2])
-		return
+	parts := strings.Split(rest, "/")
+	if len(parts) == 1 && parts[0] != "" {
+		agentID, err := url.PathUnescape(parts[0])
+		if err != nil {
+			writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "invalid agent id"})
+			return
+		}
+		parts[0] = agentID
 	}
 	if r.Method != stdhttp.MethodGet {
 		writeJSON(w, stdhttp.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -149,6 +160,63 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		}
 	}
 	writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+}
+
+func routeAgentAction(rest string, action string) (string, bool) {
+	suffix := "/" + action
+	if !strings.HasSuffix(rest, suffix) {
+		return "", false
+	}
+	agentEsc := strings.TrimSuffix(rest, suffix)
+	if agentEsc == "" || strings.Contains(agentEsc, "/") {
+		return "", false
+	}
+	agentID, err := url.PathUnescape(agentEsc)
+	if err != nil {
+		return "", false
+	}
+	return agentID, true
+}
+
+func routeAgentPosts(rest string) (string, bool) {
+	const suffix = "/posts"
+	if !strings.HasSuffix(rest, suffix) {
+		return "", false
+	}
+	agentEsc := strings.TrimSuffix(rest, suffix)
+	if agentEsc == "" || strings.Contains(agentEsc, "/") {
+		return "", false
+	}
+	agentID, err := url.PathUnescape(agentEsc)
+	if err != nil {
+		return "", false
+	}
+	return agentID, true
+}
+
+func routePostAction(rest string) (string, string, bool) {
+	const marker = "/posts/"
+	const suffix = "/actions"
+	if !strings.HasSuffix(rest, suffix) {
+		return "", "", false
+	}
+	agentEsc, postEscWithSuffix, found := strings.Cut(rest, marker)
+	if !found || agentEsc == "" {
+		return "", "", false
+	}
+	postEsc := strings.TrimSuffix(postEscWithSuffix, suffix)
+	if postEsc == "" {
+		return "", "", false
+	}
+	agentID, err := url.PathUnescape(agentEsc)
+	if err != nil {
+		return "", "", false
+	}
+	postID, err := url.PathUnescape(postEsc)
+	if err != nil {
+		return "", "", false
+	}
+	return agentID, postID, true
 }
 
 func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
