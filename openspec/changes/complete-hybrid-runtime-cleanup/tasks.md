@@ -15,11 +15,11 @@
 
 ## 3. Real Metadata Storage Mode
 
-- [ ] 3.1 Update `POST /metadata` so `STUB_MODE=false` uploads persona metadata through the configured storage client.
-- [ ] 3.2 Keep `stub://metadata/...` only for explicit `STUB_MODE=true` local development.
-- [ ] 3.3 Return a clear error in real mode when storage is unavailable instead of producing a stub pointer.
-- [ ] 3.4 Add handler/usecase tests for stub metadata, real storage metadata, and real-mode missing-storage failure.
-- [ ] 3.5 Ensure indexed agents can still resolve `personalitySummary` from stored metadata after metadata pointer creation changes.
+- [x] 3.1 Update `POST /metadata` so `STUB_MODE=false` uploads persona metadata through the configured storage client.
+- [x] 3.2 Keep `stub://metadata/...` only for explicit `STUB_MODE=true` local development.
+- [x] 3.3 Return a clear error in real mode when storage is unavailable instead of producing a stub pointer.
+- [x] 3.4 Add handler/usecase tests for stub metadata, real storage metadata, and real-mode missing-storage failure.
+- [x] 3.5 Ensure indexed agents can still resolve `personalitySummary` from stored metadata after metadata pointer creation changes.
 
 ## 4. Runtime And Documentation Cleanup
 

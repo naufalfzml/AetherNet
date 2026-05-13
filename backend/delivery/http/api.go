@@ -61,23 +61,54 @@ func (s Server) handleMetadata(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if request.PersonalitySummary == "" {
 		request.PersonalitySummary = summarizePrompt(request.Prompt)
 	}
-	pointer, err := newStubMetadataPointer()
-	if err != nil {
-		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "metadata pointer failed"})
-		return
-	}
+	updatedAt := time.Now().UTC()
 	metadata := domain.AgentMetadata{
-		MetadataPointer:    pointer,
 		Prompt:             request.Prompt,
 		PersonalitySummary: request.PersonalitySummary,
-		UpdatedAt:          time.Now().UTC(),
+		UpdatedAt:          updatedAt,
 	}
+	pointer, err := s.createMetadataPointer(r, metadata)
+	if err != nil {
+		log.Printf("create metadata pointer: %v", err)
+		writeJSON(w, metadataPointerStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+	metadata.MetadataPointer = pointer
 	if err := s.Metadata.UpsertMetadata(r.Context(), metadata); err != nil {
 		log.Printf("store metadata: %v", err)
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "metadata storage failed"})
 		return
 	}
 	writeJSON(w, stdhttp.StatusCreated, metadata)
+}
+
+func (s Server) createMetadataPointer(r *stdhttp.Request, metadata domain.AgentMetadata) (string, error) {
+	if s.Config.StubMode {
+		return newStubMetadataPointer()
+	}
+	if s.Storage == nil {
+		return "", errors.New("storage unavailable for real metadata mode")
+	}
+	pointer, err := s.Storage.UploadJSON(r.Context(), map[string]any{
+		"prompt":             metadata.Prompt,
+		"personalitySummary": metadata.PersonalitySummary,
+		"updatedAt":          metadata.UpdatedAt.Format(time.RFC3339Nano),
+		"source":             "mint-persona",
+	})
+	if err != nil {
+		return "", fmt.Errorf("metadata storage upload failed: %w", err)
+	}
+	if strings.TrimSpace(pointer) == "" {
+		return "", errors.New("metadata storage upload returned empty pointer")
+	}
+	return pointer, nil
+}
+
+func metadataPointerStatus(err error) int {
+	if strings.Contains(err.Error(), "storage unavailable") {
+		return stdhttp.StatusServiceUnavailable
+	}
+	return stdhttp.StatusBadGateway
 }
 
 func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {

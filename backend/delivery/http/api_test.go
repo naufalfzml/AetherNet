@@ -97,6 +97,12 @@ func (fakeComputeClient) RunImageGen(context.Context, usecase.ImageRequest) (use
 
 type fakeStorageClient struct{}
 
+type fakeMetadataStorageClient struct {
+	pointer  string
+	err      error
+	uploaded any
+}
+
 func (fakeStorageClient) Health(context.Context) error {
 	return nil
 }
@@ -110,6 +116,29 @@ func (fakeStorageClient) UploadBytes(context.Context, string, []byte) (string, e
 }
 
 func (fakeStorageClient) Fetch(context.Context, string) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *fakeMetadataStorageClient) Health(context.Context) error {
+	return nil
+}
+
+func (s *fakeMetadataStorageClient) UploadJSON(_ context.Context, value any) (string, error) {
+	s.uploaded = value
+	if s.err != nil {
+		return "", s.err
+	}
+	if s.pointer != "" {
+		return s.pointer, nil
+	}
+	return "storage://metadata-pointer", nil
+}
+
+func (s *fakeMetadataStorageClient) UploadBytes(context.Context, string, []byte) (string, error) {
+	return "storage://bytes", nil
+}
+
+func (s *fakeMetadataStorageClient) Fetch(context.Context, string) ([]byte, error) {
 	return nil, nil
 }
 
@@ -398,6 +427,53 @@ func TestMetadataEndpointStoresPromptAndSummary(t *testing.T) {
 	}
 	if !strings.HasPrefix(repo.metadata.MetadataPointer, "stub://metadata/") {
 		t.Fatalf("expected stub metadata pointer, got %q", repo.metadata.MetadataPointer)
+	}
+}
+
+func TestMetadataEndpointUploadsToStorageWhenNotStub(t *testing.T) {
+	repo := &fakeMetadataRepo{}
+	storage := &fakeMetadataStorageClient{pointer: "storage://metadata-root"}
+	server := Server{
+		Config:   config.Config{StubMode: false},
+		Metadata: repo,
+		Storage:  storage,
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(stdhttp.MethodPost, "/metadata", strings.NewReader(`{"prompt":"Real storage persona","personalitySummary":"Storage summary"}`))
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if repo.metadata.MetadataPointer != "storage://metadata-root" {
+		t.Fatalf("expected storage metadata pointer, got %q", repo.metadata.MetadataPointer)
+	}
+	if repo.metadata.Prompt != "Real storage persona" || repo.metadata.PersonalitySummary != "Storage summary" {
+		t.Fatalf("unexpected stored metadata: %#v", repo.metadata)
+	}
+	uploaded, ok := storage.uploaded.(map[string]any)
+	if !ok || uploaded["prompt"] != "Real storage persona" || uploaded["source"] != "mint-persona" {
+		t.Fatalf("unexpected uploaded metadata: %#v", storage.uploaded)
+	}
+}
+
+func TestMetadataEndpointRejectsRealModeWithoutStorage(t *testing.T) {
+	repo := &fakeMetadataRepo{}
+	server := Server{
+		Config:   config.Config{StubMode: false},
+		Metadata: repo,
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(stdhttp.MethodPost, "/metadata", strings.NewReader(`{"prompt":"Real storage persona"}`))
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if repo.metadata.MetadataPointer != "" {
+		t.Fatalf("metadata should not be stored on real-mode storage failure: %#v", repo.metadata)
 	}
 }
 
