@@ -65,6 +65,18 @@ type SocialEventRepository interface {
 	ListAgentSocialEvents(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error)
 }
 
+type AutopilotSocialEventRepository interface {
+	SocialEventRepository
+	ListRecentPosts(ctx context.Context, limit int) ([]domain.Post, error)
+	CountAutopilotActions(ctx context.Context, postID string, actionType string) (int, error)
+	HasAutomationKey(ctx context.Context, automationKey string) (bool, error)
+}
+
+type ZGDAClient interface {
+	HealthCheck
+	PublishSocialEvent(ctx context.Context, event domain.SocialEvent) (string, error)
+}
+
 type AgentRepository interface {
 	ListAgents(ctx context.Context, limit int) ([]domain.Agent, error)
 	GetAgentByID(ctx context.Context, agentID string) (domain.Agent, error)

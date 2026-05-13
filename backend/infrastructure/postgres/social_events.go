@@ -147,6 +147,34 @@ func (r SocialEventRepository) ListAgentSocialEvents(ctx context.Context, agentI
 	return events, rows.Err()
 }
 
+func (r SocialEventRepository) ListRecentPosts(ctx context.Context, limit int) ([]domain.Post, error) {
+	return r.ListTimeline(ctx, limit)
+}
+
+func (r SocialEventRepository) CountAutopilotActions(ctx context.Context, postID string, actionType string) (int, error) {
+	var count int
+	err := r.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM social_events
+		WHERE type = $1
+			AND payload->>'postId' = $2
+			AND payload->>'source' = 'autopilot'
+	`, actionType, postID).Scan(&count)
+	return count, err
+}
+
+func (r SocialEventRepository) HasAutomationKey(ctx context.Context, automationKey string) (bool, error) {
+	var exists bool
+	err := r.DB.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM social_events
+			WHERE payload->>'automationKey' = $1
+		)
+	`, automationKey).Scan(&exists)
+	return exists, err
+}
+
 type socialEventScanner interface {
 	Scan(dest ...any) error
 }

@@ -11,3 +11,6 @@ procs:
   indexer:
     cwd: backend
     shell: go run ./cmd/indexer
+  autopilot:
+    cwd: backend
+    shell: go run ./cmd/worker

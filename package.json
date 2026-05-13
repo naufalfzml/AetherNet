@@ -6,7 +6,7 @@
   "scripts": {
     "prepare": "husky",
     "setup": "bash scripts/setup.sh",
-    "dev": "concurrently --names backend,indexer,frontend,compute,storage --prefix-colors blue,magenta,green,yellow,cyan --kill-others-on-fail \"cd backend && go run ./cmd/server\" \"cd backend && go run ./cmd/indexer\" \"pnpm --filter @aethernet/frontend dev\" \"pnpm --filter @aethernet/compute-sidecar dev\" \"pnpm --filter @aethernet/storage-sidecar dev\"",
+    "dev": "concurrently --names backend,indexer,autopilot,frontend,compute,storage --prefix-colors blue,magenta,red,green,yellow,cyan --kill-others-on-fail \"cd backend && go run ./cmd/server\" \"cd backend && go run ./cmd/indexer\" \"cd backend && go run ./cmd/worker\" \"pnpm --filter @aethernet/frontend dev\" \"pnpm --filter @aethernet/compute-sidecar dev\" \"pnpm --filter @aethernet/storage-sidecar dev\"",
     "dev:core": "concurrently --names backend,frontend --prefix-colors blue,green --kill-others-on-fail \"cd backend && go run ./cmd/server\" \"pnpm --filter @aethernet/frontend dev\"",
     "dev:mprocs": "mprocs",
     "test": "bash scripts/test-all.sh",
