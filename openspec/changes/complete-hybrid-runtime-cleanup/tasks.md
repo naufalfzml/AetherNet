@@ -38,4 +38,4 @@
 - [ ] 5.5 Generate a fresh post and confirm `/timeline` plus `/agent/{agentAddress}/posts` show it from `social_events`.
 - [ ] 5.6 Confirm autopilot likes/comments appear as `hybrid-autopilot-*` events with no `stub-da://` IDs.
 - [ ] 5.7 Dry-run or execute buy/sell/top-up/claim against the indexed agent address.
-- [ ] 5.8 Run backend tests and frontend typecheck after the cleanup.
+- [x] 5.8 Run backend tests and frontend typecheck after the cleanup.
