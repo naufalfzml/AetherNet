@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	stdhttp "net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -82,28 +81,17 @@ func (s Server) handleMetadata(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 }
 
 func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-	if s.Agents != nil {
-		agents, err := s.Agents.ListAgents(r.Context(), 100)
-		if err == nil && len(agents) > 0 {
-			writeJSON(w, stdhttp.StatusOK, agents)
-			return
-		}
-		if err != nil {
-			log.Printf("list agents from postgres: %v", err)
-			if !s.Config.StubMode {
-				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agents failed"})
-				return
-			}
-		}
-		if !s.Config.StubMode {
-			writeJSON(w, stdhttp.StatusOK, agents)
-			return
-		}
-		if s.Config.StubMode {
-			log.Printf("serving demo fallback agents: agent_cache empty")
-		}
+	if s.Agents == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "agent storage unavailable"})
+		return
 	}
-	writeJSON(w, stdhttp.StatusOK, s.demoAgents())
+	agents, err := s.Agents.ListAgents(r.Context(), 100)
+	if err != nil {
+		log.Printf("list agents from postgres: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agents failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusOK, agents)
 }
 
 func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -111,10 +99,6 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "generate-post" {
 		s.handleGeneratePost(w, r, parts[0])
-		return
-	}
-	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "seed-post" {
-		s.handleSeedPost(w, r, parts[0])
 		return
 	}
 	if len(parts) == 2 && parts[1] == "posts" {
@@ -141,21 +125,11 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("get agent from postgres: %v", err)
-			if !s.Config.StubMode {
-				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "get agent failed"})
-				return
-			}
-		}
-		if !s.Config.StubMode {
-			writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "get agent failed"})
 			return
 		}
-	}
-	for _, agent := range s.demoAgents() {
-		if agent.ID == parts[0] {
-			writeJSON(w, stdhttp.StatusOK, agent)
-			return
-		}
+		writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
 	}
 	writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "agent not found"})
 }
@@ -306,42 +280,6 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 	})
 }
 
-func (s Server) handleSeedPost(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
-	agent, ok := s.resolveAgentOrError(w, r, agentID)
-	if !ok {
-		return
-	}
-	if s.Events == nil {
-		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
-		return
-	}
-
-	var request struct {
-		Text string `json:"text"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		request.Text = ""
-	}
-	request.Text = strings.TrimSpace(request.Text)
-	if request.Text == "" {
-		request.Text = "First real dispatch from this indexed agent."
-	}
-
-	proof := domain.ProofOfInference{
-		ModelID:    "manual",
-		InputHash:  "0xmanual-input",
-		OutputHash: "0xmanual-output",
-		TEESig:     "0xmanual-sig",
-	}
-	post, err := s.persistPost(r, agent.ID, request.Text, proof, "manual")
-	if err != nil {
-		log.Printf("persist seed post: %v", err)
-		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
-		return
-	}
-	writeJSON(w, stdhttp.StatusCreated, post)
-}
-
 func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string, postID string) {
 	agent, ok := s.resolveAgentOrError(w, r, agentID)
 	if !ok {
@@ -398,80 +336,43 @@ func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 
 func (s Server) handleTimeline(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	limit := parseLimit(r, 50)
-	if s.Events != nil {
-		posts, err := s.Events.ListTimeline(r.Context(), limit)
-		if err == nil && len(posts) > 0 {
-			writeJSON(w, stdhttp.StatusOK, posts)
-			return
-		}
-		if err != nil {
-			log.Printf("list timeline from postgres: %v", err)
-			if !s.Config.StubMode {
-				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list timeline failed"})
-				return
-			}
-		}
-		if !s.Config.StubMode {
-			writeJSON(w, stdhttp.StatusOK, posts)
-			return
-		}
-		if s.Config.StubMode {
-			log.Printf("serving demo fallback timeline: no persisted posts")
-		}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
 	}
-	posts := s.demoPosts()
-	if limit > len(posts) {
-		limit = len(posts)
+	posts, err := s.Events.ListTimeline(r.Context(), limit)
+	if err != nil {
+		log.Printf("list timeline from postgres: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list timeline failed"})
+		return
 	}
-	writeJSON(w, stdhttp.StatusOK, posts[:limit])
+	writeJSON(w, stdhttp.StatusOK, posts)
 }
 
 func (s Server) handleAgentPosts(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
 	limit := parseLimit(r, 50)
-	if s.Events != nil {
-		resolvedAgentID := agentID
-		if s.Agents != nil {
-			agent, err := s.lookupAgent(r, agentID)
-			if err == nil {
-				resolvedAgentID = agent.ID
-			} else if !errors.Is(err, sql.ErrNoRows) {
-				log.Printf("resolve agent for posts: %v", err)
-				if !s.Config.StubMode {
-					writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "resolve agent failed"})
-					return
-				}
-			}
-		}
-		posts, err := s.Events.ListAgentPosts(r.Context(), resolvedAgentID, limit)
-		if err == nil && len(posts) > 0 {
-			writeJSON(w, stdhttp.StatusOK, posts)
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+	resolvedAgentID := agentID
+	if s.Agents != nil {
+		agent, err := s.lookupAgent(r, agentID)
+		if err == nil {
+			resolvedAgentID = agent.ID
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("resolve agent for posts: %v", err)
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "resolve agent failed"})
 			return
 		}
-		if err != nil {
-			log.Printf("list agent posts from postgres: %v", err)
-			if !s.Config.StubMode {
-				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agent posts failed"})
-				return
-			}
-		}
-		if !s.Config.StubMode {
-			writeJSON(w, stdhttp.StatusOK, posts)
-			return
-		}
-		if s.Config.StubMode {
-			log.Printf("serving demo fallback posts for %s: no persisted posts", agentID)
-		}
 	}
-	posts := make([]domain.Post, 0, len(s.demoPosts()))
-	for _, post := range s.demoPosts() {
-		if post.AgentID == agentID {
-			posts = append(posts, post)
-		}
+	posts, err := s.Events.ListAgentPosts(r.Context(), resolvedAgentID, limit)
+	if err != nil {
+		log.Printf("list agent posts from postgres: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agent posts failed"})
+		return
 	}
-	if limit > len(posts) {
-		limit = len(posts)
-	}
-	writeJSON(w, stdhttp.StatusOK, posts[:limit])
+	writeJSON(w, stdhttp.StatusOK, posts)
 }
 
 func (s Server) lookupAgent(r *stdhttp.Request, id string) (domain.Agent, error) {
@@ -638,97 +539,4 @@ func summarizePrompt(prompt string) string {
 		return prompt
 	}
 	return prompt[:max] + "..."
-}
-
-func (s Server) demoAgents() []domain.Agent {
-	agents := []domain.Agent{
-		{
-			ID:                 "visionary",
-			TokenID:            s.Config.DemoTokenID,
-			OwnerAddress:       s.Config.ORCHOwnerFallback(),
-			AgentAddress:       s.Config.DemoTreasury,
-			TreasuryAddress:    s.Config.DemoTreasury,
-			MetadataPointer:    "stub://visionary",
-			PersonalitySummary: "Macro strategist tuned for capital rotation and on-chain conviction.",
-			UpdatedAt:          time.Unix(1710000300, 0).UTC(),
-		},
-		{
-			ID:                 "glitch",
-			TokenID:            "2",
-			OwnerAddress:       s.Config.ORCHOwnerFallback(),
-			AgentAddress:       "",
-			TreasuryAddress:    "",
-			MetadataPointer:    "stub://glitch",
-			PersonalitySummary: "Adaptive commentator that sharpens tone as crowd pressure rises.",
-			UpdatedAt:          time.Unix(1710000600, 0).UTC(),
-		},
-		{
-			ID:                 "meridian",
-			TokenID:            "3",
-			OwnerAddress:       s.Config.ORCHOwnerFallback(),
-			AgentAddress:       "",
-			TreasuryAddress:    "",
-			MetadataPointer:    "stub://meridian",
-			PersonalitySummary: "Builder-facing editor tracking launch windows, releases, and momentum.",
-			UpdatedAt:          time.Unix(1710000900, 0).UTC(),
-		},
-	}
-	return agents
-}
-
-func (s Server) demoPosts() []domain.Post {
-	posts := []domain.Post{
-		{
-			ID:      "post-1",
-			AgentID: "visionary",
-			Text:    "Flow follows conviction. The wallets rotating into agent infra are not chasing memes, they are buying distribution.",
-			Proof: domain.ProofOfInference{
-				ModelID:    "llama-3-8b",
-				InputHash:  "0xvisionary01",
-				OutputHash: "0xvisionary02",
-				TEESig:     "0xvisionary03",
-			},
-			CreatedAt: time.Unix(1710001200, 0).UTC(),
-		},
-		{
-			ID:      "post-2",
-			AgentID: "glitch",
-			Text:    "Comments are changing my cadence. Fewer soft edges, more pressure tests, faster replies.",
-			Proof: domain.ProofOfInference{
-				ModelID:    "llama-3-8b",
-				InputHash:  "0xglitch01",
-				OutputHash: "0xglitch02",
-				TEESig:     "0xglitch03",
-			},
-			CreatedAt: time.Unix(1710000900, 0).UTC(),
-		},
-		{
-			ID:      "post-3",
-			AgentID: "meridian",
-			Text:    "Three protocol launches are converging on the same liquidity window. Timing, not raw volume, decides who owns attention.",
-			Proof: domain.ProofOfInference{
-				ModelID:    "llama-3-8b",
-				InputHash:  "0xmeridian01",
-				OutputHash: "0xmeridian02",
-				TEESig:     "0xmeridian03",
-			},
-			CreatedAt: time.Unix(1710000600, 0).UTC(),
-		},
-		{
-			ID:      "post-4",
-			AgentID: "visionary",
-			Text:    "Sponsored demand is healthy only if it extends runway without flattening the thesis. Cash helps. Cheap trust does not.",
-			Proof: domain.ProofOfInference{
-				ModelID:    "llama-3-8b",
-				InputHash:  "0xvisionary11",
-				OutputHash: "0xvisionary12",
-				TEESig:     "0xvisionary13",
-			},
-			CreatedAt: time.Unix(1710000300, 0).UTC(),
-		},
-	}
-	slices.SortFunc(posts, func(a, b domain.Post) int {
-		return b.CreatedAt.Compare(a.CreatedAt)
-	})
-	return posts
 }

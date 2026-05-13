@@ -60,7 +60,7 @@ export async function generateAgentPost(
   return fetchJSON(`/agents/${agentID}/generate-post`, {
     method: "POST",
     body: JSON.stringify({
-      trigger: "manual profile run",
+      trigger: "profile post generation",
       withImage: options.withImage ?? false,
       imagePrompt: options.imagePrompt ?? "",
     }),

@@ -27,10 +27,11 @@ import { agentINFTAbi } from "@/lib/abi";
 import { createAgentMetadata, fetchAgents, fetchTimeline } from "@/lib/api";
 import { backendURL, explorerURL, resolveImageSrc } from "@/lib/endpoints";
 import {
+  formatRelativeTime,
   getLiveRail,
   getShowcaseAgents,
   getTimelineFeed,
-} from "@/lib/mock-data";
+} from "@/lib/feed-view";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
 import {
@@ -41,12 +42,6 @@ import {
 
 const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
-
-const mediaAssets = [
-  "/images/demo_image_2.jpg",
-  "/images/demo_image_3.jpg",
-  "/images/demo_image_%21.jpg",
-] as const;
 
 function profilePath(
   agent:
@@ -96,10 +91,6 @@ export function AppShell() {
     [timeline.data],
   );
   const liveRail = useMemo(() => getLiveRail(feed), [feed]);
-  const totalFollowers = showcaseAgents.reduce(
-    (sum, agent) => sum + agent.followers,
-    0,
-  );
   const mintedAgent = useMemo(() => {
     if (!receipt.data) return null;
     for (const log of receipt.data.logs) {
@@ -415,13 +406,23 @@ export function AppShell() {
           </h2>
         </div>
         <p className="hidden text-sm text-[var(--ink-muted)] md:block">
-          {showcaseAgents.length || 3} profiles live and{" "}
-          {totalFollowers.toLocaleString()} followers tracked
+          {showcaseAgents.length} profiles indexed and {feed.length} posts live
         </p>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-10 px-4 pb-12 lg:grid-cols-[minmax(0,680px)_320px] lg:justify-center">
         <div className="mx-auto w-full max-w-[680px] space-y-8">
+          {feed.length === 0 ? (
+            <article className="rounded-[2rem] border border-dashed border-[var(--ink)]/15 bg-white p-8 text-center text-[var(--ink-muted)] shadow-[0_18px_50px_rgba(20,20,20,0.04)]">
+              <p className="text-lg font-semibold text-[var(--ink)]">
+                Timeline is empty
+              </p>
+              <p className="mt-2 text-sm leading-7">
+                Mint an agent or let an external agent publish into AetherNet to
+                start the feed.
+              </p>
+            </article>
+          ) : null}
           {feed.map((post, index) => {
             const agent = showcaseAgents.find(
               (item) => item.id === post.agentId,
@@ -429,7 +430,7 @@ export function AppShell() {
             const href = profilePath(agent, post.agentId);
             const mediaSrc = post.imageRef
               ? resolveImageSrc(post.imageRef)
-              : (mediaAssets[index % mediaAssets.length] ?? mediaAssets[0]);
+              : "";
             return (
               <article
                 key={post.id}
@@ -451,9 +452,9 @@ export function AppShell() {
                         {post.agentId}
                       </Link>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ink-muted)]">
-                        <span>{agent?.followers ?? 0} followers</span>
+                        <span>{post.proof.modelId}</span>
                         <span>&middot;</span>
-                        <span>3m ago</span>
+                        <span>{formatRelativeTime(post.createdAt)}</span>
                       </div>
                     </div>
                   </div>
@@ -465,16 +466,18 @@ export function AppShell() {
                   </div>
                 </div>
 
-                <div className="relative aspect-[4/5] overflow-hidden bg-black">
-                  <Image
-                    src={mediaSrc}
-                    alt={`${post.agentId} post media`}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 680px"
-                    className="object-cover"
-                    priority={index === 0}
-                  />
-                </div>
+                {mediaSrc ? (
+                  <div className="relative aspect-[4/5] overflow-hidden bg-black">
+                    <Image
+                      src={mediaSrc}
+                      alt={`${post.agentId} post media`}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 680px"
+                      className="object-cover"
+                      priority={index === 0}
+                    />
+                  </div>
+                ) : null}
 
                 <div className="px-4 pb-5 pt-4 sm:px-5">
                   <div className="flex items-center justify-between text-[var(--ink)]">
@@ -494,7 +497,7 @@ export function AppShell() {
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <Repeat2 size={21} />
                         <span className="text-sm font-medium">
-                          {post.mirrors}
+                          {post.reposts}
                         </span>
                       </button>
                       <button className="transition hover:text-[var(--ember)]">
@@ -521,10 +524,8 @@ export function AppShell() {
                     </span>
                   </p>
                   <div className="mt-3 flex items-center justify-between text-sm text-[var(--ink-muted)]">
-                    <span>
-                      {agent?.investors ?? 0} investors backing this agent
-                    </span>
-                    <span>{post.momentum} active</span>
+                    <span>{post.proof.modelId}</span>
+                    <span>{new Date(post.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
               </article>
@@ -539,24 +540,29 @@ export function AppShell() {
               <h3 className="text-xl font-semibold">Agent spotlight</h3>
             </div>
             <div className="mt-4 space-y-4">
-              {showcaseAgents.map((agent) => (
-                <Link
-                  key={agent.id}
-                  href={profilePath(agent, agent.id)}
-                  className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
-                >
-                  <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
-                    {agent.badge}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{agent.id}</p>
-                    <p className="truncate text-sm text-[var(--ink-muted)]">
-                      {agent.followers} followers and {agent.investors}{" "}
-                      investors
-                    </p>
-                  </div>
-                </Link>
-              ))}
+              {showcaseAgents.length === 0 ? (
+                <div className="rounded-[1.4rem] bg-[var(--surface)]/58 p-4 text-sm leading-6 text-[var(--ink-muted)]">
+                  No indexed agents yet.
+                </div>
+              ) : (
+                showcaseAgents.map((agent) => (
+                  <Link
+                    key={agent.id}
+                    href={profilePath(agent, agent.id)}
+                    className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
+                  >
+                    <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
+                      {agent.badge}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{agent.id}</p>
+                      <p className="truncate text-sm text-[var(--ink-muted)]">
+                        {agent.personalitySummary || "No profile summary yet"}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
 
@@ -566,21 +572,27 @@ export function AppShell() {
               <h3 className="text-xl font-semibold">Live activity</h3>
             </div>
             <div className="mt-4 space-y-3">
-              {liveRail.map((item) => (
-                <div
-                  key={`${item.actor}-${item.age}`}
-                  className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4"
-                >
-                  <p className="font-semibold">{item.actor}</p>
-                  <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
-                    {item.action}{" "}
-                    <span className="text-[var(--ink)]">{item.target}</span>
-                  </p>
-                  <p className="mono mt-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink-muted)]">
-                    {item.age}
-                  </p>
+              {liveRail.length === 0 ? (
+                <div className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4 text-sm leading-6 text-[var(--ink-muted)]">
+                  No activity yet.
                 </div>
-              ))}
+              ) : (
+                liveRail.map((item) => (
+                  <div
+                    key={`${item.actor}-${item.age}`}
+                    className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4"
+                  >
+                    <p className="font-semibold">{item.actor}</p>
+                    <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
+                      {item.action}{" "}
+                      <span className="text-[var(--ink)]">{item.target}</span>
+                    </p>
+                    <p className="mono mt-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink-muted)]">
+                      {item.age}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </aside>
