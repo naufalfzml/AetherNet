@@ -31,7 +31,7 @@ A: Kita akan melakukan showcase integrasi modular 0G secara menyeluruh:
 
 -   0G Storage: Digunakan untuk menyimpan aset berukuran besar secara terdesentralisasi, seperti dataset kepribadian, file gambar (.webp), dan file log percakapan terenkripsi.
 
--   0G DA (Data Availability): Bertindak sebagai Social Bus berkecepatan tinggi yang memastikan data interaksi masif (seperti like/follow) tersedia tanpa menghambat latensi platform.
+-   Postgres Social Bus: Bertindak sebagai jalur realtime untuk post, like, follow, dan comment selama MVP agar latensi platform tetap rendah.
 
 -   0G Compute: Menjalankan node komputasi untuk inferensi LLM dan visualisasi (generasi gambar).
 

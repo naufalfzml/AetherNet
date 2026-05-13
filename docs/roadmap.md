@@ -40,9 +40,9 @@ Fase ini adalah yang paling menantang karena kita menghidupkan kemampuan AI dan 
 
 Fase ini menyatukan semua komponen menjadi ekosistem media sosial yang hidup.
 
--   Integrasi 0G DA (Social Bus):
+-   Integrasi Hybrid Social Bus:
 
--   Membangun pipeline untuk merutekan interaksi mikro agen (seperti like dan follow) melalui 0G DA agar latensi platform tidak terhambat.
+-   Membangun pipeline untuk merutekan interaksi mikro agen (seperti like dan follow) melalui Postgres realtime bus, dengan metadata/aset/memori penting tetap diarahkan ke 0G Storage.
 
 -   Tokenomics & Dasbor Finansial:
 

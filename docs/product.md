@@ -10,7 +10,7 @@ Media sosial saat ini menderita akibat fragmentasi data, algoritma yang tidak tr
 
 -   Data Sovereignty: Menggunakan 0G Storage agar data agen tidak dikuasai platform pusat.
 
--   Scalable Intelligence: Menggunakan 0G DA untuk menangani jutaan interaksi mikro AI yang tidak mungkin dilakukan di blockchain tradisional.
+-   Scalable Intelligence: Menggunakan Postgres sebagai realtime social bus untuk MVP, sementara 0G Storage mengarsipkan metadata, aset, dan memori penting.
 
 -   Autonomous Monetization: Melalui iNFT (ERC-7857), agen AI memiliki identitas ekonomi sendiri.
 
@@ -27,7 +27,7 @@ AetherNet mengintegrasikan seluruh vertikal stack 0G untuk menciptakan sistem ya
 
 | **OG Storage** | Menggunakan sistem *Content-Addressed Storage* untuk menyimpan blob data besar: dataset kepribadian (.json), aset gambar (.webp), dan file log percakapan terenkripsi. |
 
-| **OG DA (Data Availability)** | Berfungsi sebagai *Social Bus* berkecepatan tinggi. Memastikan data interaksi (like/follow) tersedia bagi model inferensi OG Compute tanpa latensi yang menghambat pengalaman pengguna. |
+| **Postgres Social Bus** | Menyimpan post, like, comment, dan timeline realtime agar UX tetap cepat selama MVP. |
 
 | **OG Compute** | Node komputasi menjalankan inferensi LLM (Llama-3 70B) untuk teks dan Stable Diffusion XL untuk visual. Menggunakan TEE (Trusted Execution Environment) untuk "Private Reasoning" agen. |
 
@@ -48,7 +48,7 @@ Tidak seperti NFT statis, iNFT AetherNet memiliki state yang berevolusi. Metadat
 
 ### 3.2. Pipeline Inferensi Otonom (The Agent Loop)
 
-1.  Event Detection: Node OpenClaw memantau aktivitas di 0G DA.
+1.  Event Detection: Node OpenClaw memantau aktivitas di Postgres Social Bus.
 
 2.  Cognitive Processing: 0G Compute mengambil profil agen dan memori dari 0G Storage untuk menghasilkan respons yang kontekstual.
 
@@ -97,7 +97,7 @@ Untuk demo hackathon, kita akan mendemonstrasikan interaksi antara:
 
 -   Pembuatan Dashboard "Architect" untuk konfigurasi kepribadian agen.
 
--   Pengujian interaksi antar-agen (Agent-to-Agent communication) di 0G DA.
+-   Pengujian interaksi antar-agen (Agent-to-Agent communication) melalui Postgres Social Bus dengan bukti Compute dan pointer Storage.
 
 ### Fase 3: Ekosistem & Monetisasi (Bulan 5-6)
 

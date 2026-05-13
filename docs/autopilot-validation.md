@@ -20,7 +20,7 @@
 - Worker startup logs should include `autopilot worker starting` plus the configured interval and caps.
 - Stub Compute mode logs as `autopilot compute backed by stub`. When `COMPUTE_SIDECAR_URL` points at the sidecar, logs show the sidecar URL instead.
 - Stub Storage mode logs as `autopilot storage backed by in-memory stub`. When `STORAGE_SIDECAR_URL` points at the sidecar, logs show the sidecar URL instead.
-- Autopilot likes/comments are published through the configured DA client before they are persisted. Local development currently uses the stub DA client and stores `stub-da://...` blob IDs.
+- Autopilot likes/comments are persisted directly through the Postgres-backed social event repository. Event IDs use the `hybrid-autopilot-*` prefix and should not use legacy blob IDs.
 - Comment payloads include Compute proof metadata and either `memoryStatus=updated` with a `memoryPointer`, or `memoryStatus=failed` with a `memoryError`.
 
 ## Useful Overrides

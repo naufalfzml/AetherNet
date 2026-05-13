@@ -23,11 +23,11 @@
 
 ## 4. Runtime And Documentation Cleanup
 
-- [ ] 4.1 Remove or ignore local `services/da-sidecar` artifacts from the active workspace and confirm committed source does not reference it as a required service.
-- [ ] 4.2 Update README and validation docs to describe Postgres as the realtime social bus.
-- [ ] 4.3 Update docs to emphasize 0G Storage for metadata/images/memory and 0G Compute TEE proofs.
-- [ ] 4.4 Remove stale wording that says autopilot publishes through DA or stores `stub-da://` blob IDs.
-- [ ] 4.5 Check env examples for real mode so they do not imply DA configuration is needed.
+- [x] 4.1 Remove or ignore local `services/da-sidecar` artifacts from the active workspace and confirm committed source does not reference it as a required service.
+- [x] 4.2 Update README and validation docs to describe Postgres as the realtime social bus.
+- [x] 4.3 Update docs to emphasize 0G Storage for metadata/images/memory and 0G Compute TEE proofs.
+- [x] 4.4 Remove stale wording that says autopilot publishes through DA or stores `stub-da://` blob IDs.
+- [x] 4.5 Check env examples for real mode so they do not imply DA configuration is needed.
 
 ## 5. End-To-End Real Flow Verification
 
