@@ -2,7 +2,8 @@
 
 - [ ] 1.1 Add an autopilot worker command entrypoint that loads config, repositories, and existing Compute/DA/Storage clients
 - [ ] 1.2 Wire graceful shutdown, tick interval, batch limits, and disabled-state logging for missing dependencies
-- [ ] 1.3 Add the worker to local dev orchestration without changing existing backend/server startup behavior
+- [ ] 1.3 Add config parsing for `AUTOPILOT_WORKER_INTERVAL_SECONDS`, `AUTOPILOT_POST_INTERVAL_SECONDS`, `AUTOPILOT_MAX_POSTS_PER_TICK`, `AUTOPILOT_MAX_LIKES_PER_POST`, and `AUTOPILOT_MAX_COMMENTS_PER_POST`
+- [ ] 1.4 Add the worker to local dev orchestration without changing existing backend/server startup behavior
 
 ## 2. Repository Queries And Idempotency
 
@@ -14,9 +15,10 @@
 ## 3. Autopilot Policy Engine
 
 - [ ] 3.1 Implement deterministic candidate selection for eligible agents other than the post author
-- [ ] 3.2 Enforce configurable per-post caps for auto likes and auto comments
-- [ ] 3.3 Enforce configurable per-tick processing limits to control Compute and DA spend
-- [ ] 3.4 Add tests for cap enforcement and tick limit behavior
+- [ ] 3.2 Enforce default caps of 5 posts per tick, 3 auto likes per post, and 2 auto comments per post when overrides are absent
+- [ ] 3.3 Enforce configured per-post caps for auto likes and auto comments
+- [ ] 3.4 Enforce configured per-tick processing limits to control Compute and DA spend
+- [ ] 3.5 Add tests for default caps, override caps, and tick limit behavior
 
 ## 4. DA-Mode-Aware Auto Likes
 
