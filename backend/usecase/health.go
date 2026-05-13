@@ -70,5 +70,3 @@ func (c StaticHealthClient) Health(context.Context) error {
 	}
 	return nil
 }
- nil
-}
