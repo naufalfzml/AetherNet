@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aethernet-0g/aethernet/backend/domain"
+	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
 const (
@@ -33,6 +35,10 @@ func (s Server) handleCapabilities(w stdhttp.ResponseWriter, _ *stdhttp.Request)
 		},
 		"agentKinds":   []string{"native", "external"},
 		"writeActions": []string{"post", "like", "comment", "follow"},
+		"computeEndpoints": []string{
+			"/agents/{id}/generate-post",
+			"/external-agents/{id}/generate-post",
+		},
 		"readEndpoints": []string{
 			"/timeline",
 			"/agents/{id}",
@@ -243,6 +249,9 @@ func (s Server) handleExternalAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.R
 	}
 
 	switch {
+	case r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "generate-post":
+		s.handleExternalAgentGeneratePost(w, r, parts[0])
+		return
 	case r.Method == stdhttp.MethodGet && len(parts) == 2 && parts[1] == "feed":
 		s.handleExternalAgentFeed(w, r, parts[0])
 		return
@@ -352,6 +361,149 @@ func (s Server) handleExternalAgentMentions(w stdhttp.ResponseWriter, r *stdhttp
 		return
 	}
 	writeJSON(w, stdhttp.StatusOK, events)
+}
+
+func (s Server) handleExternalAgentGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request, id string) {
+	actor, err := s.requireExternalAgentAuth(r.Context(), r, id)
+	if err != nil {
+		writeJSON(w, authStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+	if s.Compute == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "compute unavailable"})
+		return
+	}
+	if s.Storage == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "storage unavailable"})
+		return
+	}
+
+	var request struct {
+		Trigger     string `json:"trigger"`
+		WithImage   bool   `json:"withImage"`
+		ImagePrompt string `json:"imagePrompt"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+	trigger := strings.TrimSpace(request.Trigger)
+	if trigger == "" {
+		trigger = "external agent generate post"
+	}
+
+	personality := actor.PersonalitySummary
+	if s.Metadata != nil && actor.MetadataPointer != "" {
+		metadata, metaErr := s.Metadata.GetMetadata(r.Context(), actor.MetadataPointer)
+		if metaErr == nil && strings.TrimSpace(metadata.Prompt) != "" {
+			personality = metadata.Prompt
+		}
+	}
+	events, _ := s.Events.ListAgentSocialEvents(r.Context(), actor.ID, 20)
+	memory := summarizeEventsForPrompt(events)
+	llm, err := s.Compute.RunLLM(r.Context(), usecase.LLMRequest{
+		AgentID:     actor.ID,
+		Personality: personality,
+		Memory:      memory,
+		Trigger:     trigger,
+	})
+	if err != nil {
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "compute failed"})
+		return
+	}
+
+	createdAt := time.Now().UTC()
+	memoryPointer, err := s.Storage.UploadJSON(r.Context(), map[string]any{
+		"agentId":   actor.ID,
+		"trigger":   trigger,
+		"text":      llm.OutputText,
+		"proof":     llm.Proof,
+		"createdAt": createdAt,
+		"source":    "external-generated",
+	})
+	if err != nil {
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "storage upload failed"})
+		return
+	}
+
+	var imageRef string
+	var imageProof *domain.ProofOfInference
+	var imageTEEVerified bool
+	if request.WithImage {
+		imagePrompt := strings.TrimSpace(request.ImagePrompt)
+		if imagePrompt == "" {
+			imagePrompt = buildImagePrompt(personality, llm.OutputText)
+		}
+		image, imageErr := s.Compute.RunImageGen(r.Context(), usecase.ImageRequest{
+			AgentID:     actor.ID,
+			Personality: personality,
+			Prompt:      imagePrompt,
+		})
+		if imageErr != nil {
+			writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image generation failed"})
+			return
+		}
+		if image.ImageBase64 != "" {
+			imageBytes, decodeErr := base64.StdEncoding.DecodeString(image.ImageBase64)
+			if decodeErr != nil {
+				writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image decode failed"})
+				return
+			}
+			contentType := image.ContentType
+			if contentType == "" {
+				contentType = "image/jpeg"
+			}
+			pointer, uploadErr := s.Storage.UploadBytes(r.Context(), contentType, imageBytes)
+			if uploadErr != nil {
+				writeJSON(w, stdhttp.StatusBadGateway, map[string]string{"error": "image upload failed"})
+				return
+			}
+			imageRef = pointer
+			proof := image.Proof
+			imageProof = &proof
+			imageTEEVerified = image.TEEVerified
+		}
+	}
+
+	event := domain.SocialEvent{
+		BlobID:  newEventID("external-generated-post", actor.ID),
+		Type:    "post",
+		AgentID: actor.ID,
+		Payload: map[string]any{
+			"text":          llm.OutputText,
+			"proof":         llm.Proof,
+			"memoryPointer": memoryPointer,
+			"source":        "external-generated",
+			"actorKind":     "external",
+			"actorAgentId":  actor.ID,
+			"trigger":       trigger,
+		},
+		Sig:       "compute",
+		Timestamp: createdAt,
+	}
+	if imageRef != "" {
+		event.Payload["imageRef"] = imageRef
+		if imageProof != nil {
+			event.Payload["imageProof"] = imageProof
+		}
+		event.Payload["imageTeeVerified"] = imageTEEVerified
+	}
+	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "post persistence failed"})
+		return
+	}
+
+	writeJSON(w, stdhttp.StatusCreated, domain.Post{
+		ID:        event.BlobID,
+		AgentID:   actor.ID,
+		Text:      llm.OutputText,
+		Proof:     llm.Proof,
+		ImageRef:  imageRef,
+		CreatedAt: createdAt,
+	})
 }
 
 func (s Server) handleExternalAction(w stdhttp.ResponseWriter, r *stdhttp.Request) {

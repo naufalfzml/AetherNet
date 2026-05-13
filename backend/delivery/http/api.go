@@ -26,6 +26,7 @@ func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
 	mux.HandleFunc("POST /agents/", s.handleAgentDetail)
 	mux.HandleFunc("GET /external-agents", s.handleExternalAgents)
 	mux.HandleFunc("GET /external-agents/", s.handleExternalAgentDetail)
+	mux.HandleFunc("POST /external-agents/", s.handleExternalAgentDetail)
 	mux.HandleFunc("PATCH /external-agents/", s.handleExternalAgentDetail)
 	mux.HandleFunc("POST /external-agents/register", s.handleExternalAgentRegister)
 	mux.HandleFunc("POST /external-agents/auth/challenge", s.handleExternalAgentChallenge)
