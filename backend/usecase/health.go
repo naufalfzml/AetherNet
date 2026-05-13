@@ -8,7 +8,6 @@ import (
 
 type HealthService struct {
 	Storage HealthCheck
-	DA      HealthCheck
 	Compute HealthCheck
 	Chain   HealthCheck
 }

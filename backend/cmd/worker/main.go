@@ -10,7 +10,6 @@ import (
 
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/compute"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
-	"github.com/aethernet-0g/aethernet/backend/infrastructure/da"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/postgres"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/storage"
 	"github.com/aethernet-0g/aethernet/backend/usecase"
@@ -56,7 +55,6 @@ func main() {
 		Agents:  postgres.AgentRepository{DB: db},
 		Events:  repo,
 		Compute: computeClient,
-		DA:      da.NewStubClient(),
 		Storage: storageClient,
 		Config: usecase.AutopilotConfig{
 			WorkerIntervalSeconds: cfg.AutopilotWorkerIntervalSeconds,

@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"sort"
@@ -59,7 +61,6 @@ type Autopilot struct {
 	Agents  AgentRepository
 	Events  AutopilotSocialEventRepository
 	Compute ZGComputeClient
-	DA      ZGDAClient
 	Storage ZGStorageClient
 	Config  AutopilotConfig
 }
@@ -72,7 +73,7 @@ type AutopilotTickResult struct {
 
 func (a Autopilot) Run(ctx context.Context) error {
 	if !a.enabled() {
-		log.Println("autopilot disabled: missing agents, events, compute, DA, or storage dependency")
+		log.Println("autopilot disabled: missing agents, events, compute, or storage dependency")
 		<-ctx.Done()
 		return ctx.Err()
 	}
@@ -157,7 +158,7 @@ func (a Autopilot) createLikes(ctx context.Context, post domain.Post, candidates
 			Sig:       "autopilot",
 			Timestamp: time.Now().UTC(),
 		}
-		if err := a.publishAndPersist(ctx, event); err != nil {
+		if err := a.persistAutopilotEvent(ctx, event); err != nil {
 			return err
 		}
 		count++
@@ -212,7 +213,7 @@ func (a Autopilot) createComments(ctx context.Context, post domain.Post, candida
 			Sig:       "autopilot",
 			Timestamp: time.Now().UTC(),
 		}
-		if err := a.publishAndPersist(ctx, event); err != nil {
+		if err := a.persistAutopilotEvent(ctx, event); err != nil {
 			return err
 		}
 		count++
@@ -239,18 +240,16 @@ func (a Autopilot) appendCommentMemory(ctx context.Context, agent domain.Agent, 
 	payload["memoryPointer"] = pointer
 }
 
-func (a Autopilot) publishAndPersist(ctx context.Context, event domain.SocialEvent) error {
-	blobID, err := a.DA.PublishSocialEvent(ctx, event)
-	if err != nil {
-		return err
+func (a Autopilot) persistAutopilotEvent(ctx context.Context, event domain.SocialEvent) error {
+	if event.BlobID == "" {
+		event.BlobID = autopilotEventID(event)
 	}
-	event.BlobID = blobID
-	event.ID = blobID
+	event.ID = event.BlobID
 	return a.Events.UpsertSocialEvent(ctx, event)
 }
 
 func (a Autopilot) enabled() bool {
-	return a.Agents != nil && a.Events != nil && a.Compute != nil && a.DA != nil && a.Storage != nil
+	return a.Agents != nil && a.Events != nil && a.Compute != nil && a.Storage != nil
 }
 
 func eligibleAgents(agents []domain.Agent, authorID string) []domain.Agent {
@@ -266,4 +265,13 @@ func eligibleAgents(agents []domain.Agent, authorID string) []domain.Agent {
 
 func AutomationKey(agentID string, actionType string, targetPostID string) string {
 	return strings.ToLower(strings.TrimSpace(agentID)) + ":" + strings.ToLower(strings.TrimSpace(actionType)) + ":" + strings.TrimSpace(targetPostID)
+}
+
+func autopilotEventID(event domain.SocialEvent) string {
+	if key, ok := event.Payload["automationKey"].(string); ok && strings.TrimSpace(key) != "" {
+		sum := sha256.Sum256([]byte(key))
+		return "hybrid-autopilot-" + strings.ToLower(event.Type) + "-" + hex.EncodeToString(sum[:8])
+	}
+	sum := sha256.Sum256([]byte(event.AgentID + ":" + event.Type + ":" + event.Timestamp.Format(time.RFC3339Nano)))
+	return "hybrid-autopilot-" + strings.ToLower(event.Type) + "-" + hex.EncodeToString(sum[:8])
 }

@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,17 +78,28 @@ func TestAutopilotDefaultAndOverrideCaps(t *testing.T) {
 	}
 }
 
-func TestAutopilotDAPublishFailurePreventsPersistence(t *testing.T) {
+func TestAutopilotPersistsHybridEventsWithoutDA(t *testing.T) {
 	events := newFakeAutopilotEvents([]domain.Post{{ID: "post-1", AgentID: "agent-a", Text: "hello"}})
 	ap := testAutopilot(events, []domain.Agent{{ID: "agent-a"}, {ID: "agent-b"}})
-	ap.DA = fakeDA{err: errors.New("da down")}
+	ap.Config = AutopilotConfig{MaxLikesPerPost: 1, MaxCommentsPerPost: 1}
 
-	_, err := ap.Tick(context.Background())
-	if err == nil {
-		t.Fatalf("expected DA error")
+	result, err := ap.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("tick failed: %v", err)
 	}
-	if len(events.persisted) != 0 {
-		t.Fatalf("event persisted after DA failure: %#v", events.persisted)
+	if result.LikesCreated != 1 || result.CommentsCreated != 1 {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if len(events.persisted) != 2 {
+		t.Fatalf("expected persisted like and comment, got %#v", events.persisted)
+	}
+	for _, event := range events.persisted {
+		if !strings.HasPrefix(event.BlobID, "hybrid-autopilot-"+event.Type+"-") {
+			t.Fatalf("expected hybrid autopilot id, got %#v", event)
+		}
+		if strings.HasPrefix(event.BlobID, "stub-da://") {
+			t.Fatalf("unexpected DA blob id: %#v", event)
+		}
 	}
 }
 
@@ -152,7 +164,6 @@ func testAutopilot(events *fakeAutopilotEvents, agents []domain.Agent) Autopilot
 		Agents:  fakeAgents{agents: agents},
 		Events:  events,
 		Compute: fakeCompute{},
-		DA:      fakeDA{},
 		Storage: fakeStorage{},
 	}
 }
@@ -279,21 +290,6 @@ func (f fakeCompute) RunLLM(context.Context, LLMRequest) (LLMResponse, error) {
 
 func (f fakeCompute) RunImageGen(context.Context, ImageRequest) (ImageResponse, error) {
 	return ImageResponse{}, nil
-}
-
-type fakeDA struct {
-	err error
-}
-
-func (f fakeDA) Health(context.Context) error {
-	return nil
-}
-
-func (f fakeDA) PublishSocialEvent(_ context.Context, event domain.SocialEvent) (string, error) {
-	if f.err != nil {
-		return "", f.err
-	}
-	return "da://" + event.Type + "/" + event.AgentID + "/" + event.Payload["targetPostId"].(string), nil
 }
 
 type fakeStorage struct {
