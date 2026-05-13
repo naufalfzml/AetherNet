@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -132,4 +133,64 @@ func (c Config) ORCHOwnerFallback() string {
 		return c.PlatformWallet
 	}
 	return c.INFTRegistry
+}
+
+func (c Config) HasComputeSidecar() bool {
+	return configuredEndpoint(c.ComputeSidecarURL)
+}
+
+func (c Config) HasStorageSidecar() bool {
+	return configuredEndpoint(c.StorageSidecarURL)
+}
+
+func (c Config) HasChainRPC() bool {
+	return configuredEndpoint(c.OGRPCURL)
+}
+
+func (c Config) ValidateBackendRuntime() error {
+	if c.StubMode {
+		return nil
+	}
+	missing := make([]string, 0)
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		missing = append(missing, "DATABASE_URL")
+	}
+	if !c.HasChainRPC() {
+		missing = append(missing, "OG_RPC_URL")
+	}
+	if !c.HasComputeSidecar() {
+		missing = append(missing, "COMPUTE_SIDECAR_URL")
+	}
+	if !c.HasStorageSidecar() {
+		missing = append(missing, "STORAGE_SIDECAR_URL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("real backend mode requires %s (set STUB_MODE=true for local stub mode)", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (c Config) ValidateWorkerRuntime() error {
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
+	if c.StubMode {
+		return nil
+	}
+	missing := make([]string, 0)
+	if !c.HasComputeSidecar() {
+		missing = append(missing, "COMPUTE_SIDECAR_URL")
+	}
+	if !c.HasStorageSidecar() {
+		missing = append(missing, "STORAGE_SIDECAR_URL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("real autopilot mode requires %s (set STUB_MODE=true for local stub mode)", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func configuredEndpoint(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && !strings.HasPrefix(value, "<") && !strings.HasSuffix(value, ">")
 }

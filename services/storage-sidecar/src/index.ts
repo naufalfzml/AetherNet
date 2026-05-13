@@ -35,8 +35,10 @@ function getIndexer(): Indexer {
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/healthz") {
-      return json(res, 200, {
-        status: "ok",
+      const configured = Boolean(EVM_RPC && INDEXER_RPC && PRIVATE_KEY);
+      const status = configured ? 200 : 503;
+      return json(res, status, {
+        status: configured ? "ok" : "degraded",
         evmRpc: EVM_RPC ? "configured" : "missing",
         indexerRpc: INDEXER_RPC ? "configured" : "missing",
         privateKey: PRIVATE_KEY ? "configured" : "missing",

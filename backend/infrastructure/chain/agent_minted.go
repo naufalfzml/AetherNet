@@ -26,6 +26,11 @@ type LogScanner struct {
 	HTTPClient *http.Client
 }
 
+func (s LogScanner) Health(ctx context.Context) error {
+	_, err := s.LatestBlock(ctx)
+	return err
+}
+
 func (s LogScanner) LatestBlock(ctx context.Context) (*big.Int, error) {
 	var result string
 	if err := s.rpc(ctx, "eth_blockNumber", []any{}, &result); err != nil {

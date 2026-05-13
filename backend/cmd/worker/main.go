@@ -17,8 +17,8 @@ import (
 
 func main() {
 	cfg := config.Load()
-	if cfg.DatabaseURL == "" {
-		log.Println("autopilot worker disabled: DATABASE_URL is empty")
+	if err := cfg.ValidateWorkerRuntime(); err != nil {
+		log.Fatal(err)
 		return
 	}
 
@@ -27,14 +27,13 @@ func main() {
 
 	db, err := postgres.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Printf("autopilot worker disabled: open postgres: %v", err)
-		return
+		log.Fatalf("open postgres: %v", err)
 	}
 	defer db.Close()
 
 	var computeClient usecase.ZGComputeClient
-	if cfg.ComputeSidecarURL != "" && cfg.ComputeSidecarURL != "<LOCAL_COMPUTE_SIDECAR_URL>" {
-		computeClient = compute.HTTPClient{BaseURL: cfg.ComputeSidecarURL}
+	if cfg.HasComputeSidecar() {
+		computeClient = compute.HTTPClient{BaseURL: cfg.ComputeSidecarURL, RequireReal: !cfg.StubMode}
 		log.Printf("autopilot compute backed by sidecar at %s", cfg.ComputeSidecarURL)
 	} else {
 		computeClient = compute.StubClient{}
@@ -42,7 +41,7 @@ func main() {
 	}
 
 	var storageClient usecase.ZGStorageClient
-	if cfg.StorageSidecarURL != "" && cfg.StorageSidecarURL != "<LOCAL_STORAGE_SIDECAR_URL>" {
+	if cfg.HasStorageSidecar() {
 		storageClient = storage.NewHTTPClient(cfg.StorageSidecarURL)
 		log.Printf("autopilot storage backed by sidecar at %s", cfg.StorageSidecarURL)
 	} else {

@@ -12,8 +12,9 @@ import (
 )
 
 type HTTPClient struct {
-	BaseURL string
-	Client  *http.Client
+	BaseURL     string
+	Client      *http.Client
+	RequireReal bool
 }
 
 func (c HTTPClient) Health(ctx context.Context) error {
@@ -28,6 +29,16 @@ func (c HTTPClient) Health(ctx context.Context) error {
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		return fmt.Errorf("compute sidecar unhealthy: %s", res.Status)
+	}
+	var out struct {
+		StubMode  bool   `json:"stubMode"`
+		ImageMode string `json:"imageMode"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return err
+	}
+	if c.RequireReal && out.StubMode {
+		return fmt.Errorf("compute sidecar is in stub mode")
 	}
 	return nil
 }

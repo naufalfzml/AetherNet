@@ -100,7 +100,7 @@ cp .env.example .env
 #   OG_CHAIN_ID=16601
 #   PLATFORM_WALLET=<optional, default: deployer wallet>
 #   ORCHESTRATOR_ADDRESS=<optional, default: deployer wallet>
-#   STUB_MODE=true
+#   STUB_MODE=false   # use true only for offline local UI/dev
 
 pnpm setup
 # Akan menjalankan:
@@ -274,6 +274,8 @@ STUB_MODE=true pnpm dev
 - Compute returns canned LLM output + fake-but-valid Proof of Inference
 - Realtime social events tetap masuk Postgres lokal
 - Storage/metadata dapat memakai stub lokal saat sidecar tidak dikonfigurasi
+
+Untuk mainnet atau demo hackathon, gunakan `STUB_MODE=false`. Backend akan gagal start jika `DATABASE_URL`, `OG_RPC_URL`, `COMPUTE_SIDECAR_URL`, atau `STORAGE_SIDECAR_URL` belum dikonfigurasi.
 
 ---
 

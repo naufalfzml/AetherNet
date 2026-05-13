@@ -31,11 +31,14 @@ const CHAT_MODEL =
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/healthz") {
-      return json(res, 200, {
-        status: "ok",
+      const configured = STUB_MODE || Boolean(ROUTER_BASE_URL && ROUTER_API_KEY);
+      return json(res, configured ? 200 : 503, {
+        status: configured ? "ok" : "degraded",
         stubMode: STUB_MODE,
         chatModel: CHAT_MODEL,
         imageMode: imageMode(),
+        routerBaseUrl: ROUTER_BASE_URL ? "configured" : "missing",
+        routerApiKey: ROUTER_API_KEY ? "configured" : "missing",
       });
     }
     if (req.method === "POST" && req.url === "/infer/llm") {
