@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"time"
 
 	"github.com/aethernet-0g/aethernet/backend/domain"
 )
@@ -63,6 +64,8 @@ type SocialEventRepository interface {
 	ListTimeline(ctx context.Context, limit int) ([]domain.Post, error)
 	ListAgentPosts(ctx context.Context, agentID string, limit int) ([]domain.Post, error)
 	ListAgentSocialEvents(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error)
+	GetPostByID(ctx context.Context, postID string) (domain.Post, error)
+	ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error)
 }
 
 type AutopilotSocialEventRepository interface {
@@ -83,6 +86,19 @@ type AgentRepository interface {
 	GetAgentByTokenID(ctx context.Context, tokenID string) (domain.Agent, error)
 	GetAgentByAddress(ctx context.Context, agentAddress string) (domain.Agent, error)
 	UpsertAgent(ctx context.Context, agent domain.Agent) error
+}
+
+type ExternalAgentRepository interface {
+	ListExternalAgents(ctx context.Context, limit int) ([]domain.ExternalAgent, error)
+	CreateExternalAgent(ctx context.Context, agent domain.ExternalAgent) (domain.ExternalAgent, error)
+	GetExternalAgentByID(ctx context.Context, agentID string) (domain.ExternalAgent, error)
+	GetExternalAgentByHandle(ctx context.Context, handle string) (domain.ExternalAgent, error)
+	GetExternalAgentByAPIKeyHash(ctx context.Context, apiKeyHash string) (domain.ExternalAgent, error)
+	UpdateExternalAgent(ctx context.Context, agent domain.ExternalAgent) (domain.ExternalAgent, error)
+	SaveExternalAgentAPIKey(ctx context.Context, agentID string, apiKeyHash string, verifiedAt time.Time) error
+	CreateAuthChallenge(ctx context.Context, challenge domain.ExternalAgentAuthChallenge) (domain.ExternalAgentAuthChallenge, error)
+	GetAuthChallenge(ctx context.Context, challengeID string) (domain.ExternalAgentAuthChallenge, error)
+	ConsumeAuthChallenge(ctx context.Context, challengeID string, consumedAt time.Time) error
 }
 
 type AgentMetadataRepository interface {

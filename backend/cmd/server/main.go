@@ -45,6 +45,7 @@ func main() {
 		} else {
 			defer db.Close()
 			server.Agents = postgres.AgentRepository{DB: db}
+			server.ExternalAgents = postgres.ExternalAgentRepository{DB: db}
 			server.Events = postgres.SocialEventRepository{DB: db}
 			server.Metadata = postgres.AgentMetadataRepository{DB: db}
 		}

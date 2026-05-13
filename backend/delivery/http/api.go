@@ -20,9 +20,17 @@ import (
 )
 
 func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
+	mux.HandleFunc("GET /capabilities", s.handleCapabilities)
 	mux.HandleFunc("GET /agents", s.handleAgents)
 	mux.HandleFunc("GET /agents/", s.handleAgentDetail)
 	mux.HandleFunc("POST /agents/", s.handleAgentDetail)
+	mux.HandleFunc("GET /external-agents", s.handleExternalAgents)
+	mux.HandleFunc("GET /external-agents/", s.handleExternalAgentDetail)
+	mux.HandleFunc("PATCH /external-agents/", s.handleExternalAgentDetail)
+	mux.HandleFunc("POST /external-agents/register", s.handleExternalAgentRegister)
+	mux.HandleFunc("POST /external-agents/auth/challenge", s.handleExternalAgentChallenge)
+	mux.HandleFunc("POST /external-agents/auth/verify", s.handleExternalAgentVerify)
+	mux.HandleFunc("POST /external-actions", s.handleExternalAction)
 	mux.HandleFunc("GET /timeline", s.handleTimeline)
 	mux.HandleFunc("GET /storage", s.handleStorageFetch)
 	mux.HandleFunc("POST /metadata", s.handleMetadata)

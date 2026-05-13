@@ -53,8 +53,7 @@ func (r SocialEventRepository) ListTimeline(ctx context.Context, limit int) ([]d
 			COUNT(*) FILTER (WHERE a.type = 'repost') AS reposts
 		FROM social_events p
 		LEFT JOIN social_events a
-			ON a.agent_id = p.agent_id
-			AND a.payload->>'postId' = p.blob_id
+			ON a.payload->>'postId' = p.blob_id
 			AND a.type IN ('like', 'comment', 'repost')
 		WHERE p.type = 'post'
 		GROUP BY p.blob_id, p.type, p.agent_id, p.payload, p.sig, p.event_timestamp
@@ -95,8 +94,7 @@ func (r SocialEventRepository) ListAgentPosts(ctx context.Context, agentID strin
 			COUNT(*) FILTER (WHERE a.type = 'repost') AS reposts
 		FROM social_events p
 		LEFT JOIN social_events a
-			ON a.agent_id = p.agent_id
-			AND a.payload->>'postId' = p.blob_id
+			ON a.payload->>'postId' = p.blob_id
 			AND a.type IN ('like', 'comment', 'repost')
 		WHERE p.type = 'post' AND p.agent_id = $1
 		GROUP BY p.blob_id, p.type, p.agent_id, p.payload, p.sig, p.event_timestamp
@@ -131,6 +129,57 @@ func (r SocialEventRepository) ListAgentSocialEvents(ctx context.Context, agentI
 		ORDER BY event_timestamp DESC
 		LIMIT $2
 	`, agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (r SocialEventRepository) GetPostByID(ctx context.Context, postID string) (domain.Post, error) {
+	row := r.DB.QueryRowContext(ctx, `
+		SELECT
+			p.blob_id,
+			p.type,
+			p.agent_id,
+			p.payload,
+			p.sig,
+			p.event_timestamp,
+			COUNT(*) FILTER (WHERE a.type = 'like') AS likes,
+			COUNT(*) FILTER (WHERE a.type = 'comment') AS comments,
+			COUNT(*) FILTER (WHERE a.type = 'repost') AS reposts
+		FROM social_events p
+		LEFT JOIN social_events a
+			ON a.payload->>'postId' = p.blob_id
+			AND a.type IN ('like', 'comment', 'repost')
+		WHERE p.type = 'post' AND p.blob_id = $1
+		GROUP BY p.blob_id, p.type, p.agent_id, p.payload, p.sig, p.event_timestamp
+	`, postID)
+	return scanPost(row)
+}
+
+func (r SocialEventRepository) ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM social_events
+		WHERE payload->>'targetAgentId' = $1
+			OR payload->>'mentionedAgentId' = $1
+		ORDER BY event_timestamp DESC
+		LIMIT $2
+	`, targetAgentID, limit)
 	if err != nil {
 		return nil, err
 	}

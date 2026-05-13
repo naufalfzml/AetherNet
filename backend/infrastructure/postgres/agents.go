@@ -140,6 +140,7 @@ func scanAgent(scanner agentScanner) (domain.Agent, error) {
 	if err != nil {
 		return domain.Agent{}, err
 	}
+	agent.Kind = "native"
 	agent.AgentAddress = agent.TreasuryAddress
 	if agent.PersonalitySummary == "" {
 		agent.PersonalitySummary = "Indexed agent " + agent.TokenID

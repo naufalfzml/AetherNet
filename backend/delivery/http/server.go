@@ -9,14 +9,15 @@ import (
 )
 
 type Server struct {
-	Health   usecase.HealthService
-	Metrics  *usecase.Metrics
-	Config   config.Config
-	Agents   usecase.AgentRepository
-	Events   usecase.SocialEventRepository
-	Metadata usecase.AgentMetadataRepository
-	Compute  usecase.ZGComputeClient
-	Storage  usecase.ZGStorageClient
+	Health         usecase.HealthService
+	Metrics        *usecase.Metrics
+	Config         config.Config
+	Agents         usecase.AgentRepository
+	ExternalAgents usecase.ExternalAgentRepository
+	Events         usecase.SocialEventRepository
+	Metadata       usecase.AgentMetadataRepository
+	Compute        usecase.ZGComputeClient
+	Storage        usecase.ZGStorageClient
 }
 
 func (s Server) Handler() stdhttp.Handler {
@@ -31,7 +32,7 @@ func withCORS(next stdhttp.Handler) stdhttp.Handler {
 	return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Aethernet-Agent-Key")
 		if r.Method == stdhttp.MethodOptions {
 			w.WriteHeader(stdhttp.StatusNoContent)
 			return

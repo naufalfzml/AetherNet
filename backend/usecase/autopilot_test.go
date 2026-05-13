@@ -211,6 +211,19 @@ func (f *fakeAutopilotEvents) ListAgentSocialEvents(context.Context, string, int
 	return nil, nil
 }
 
+func (f *fakeAutopilotEvents) GetPostByID(_ context.Context, postID string) (domain.Post, error) {
+	for _, post := range f.posts {
+		if post.ID == postID {
+			return post, nil
+		}
+	}
+	return domain.Post{}, errors.New("post not found")
+}
+
+func (f *fakeAutopilotEvents) ListMentions(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
 func (f *fakeAutopilotEvents) ListRecentPosts(_ context.Context, limit int) ([]domain.Post, error) {
 	if limit > len(f.posts) {
 		limit = len(f.posts)

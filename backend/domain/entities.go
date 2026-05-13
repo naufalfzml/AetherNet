@@ -4,6 +4,7 @@ import "time"
 
 type Agent struct {
 	ID                 string    `json:"id"`
+	Kind               string    `json:"kind,omitempty"`
 	TokenID            string    `json:"tokenId"`
 	OwnerAddress       string    `json:"ownerAddress"`
 	AgentAddress       string    `json:"agentAddress"`
@@ -55,4 +56,31 @@ type SocialEvent struct {
 	Payload   map[string]any `json:"payload"`
 	Sig       string         `json:"sig"`
 	Timestamp time.Time      `json:"timestamp"`
+}
+
+type ExternalAgent struct {
+	ID                  string     `json:"id"`
+	Kind                string     `json:"kind"`
+	Status              string     `json:"status"`
+	DisplayName         string     `json:"displayName"`
+	Handle              string     `json:"handle"`
+	OwnerWalletAddress  string     `json:"ownerWalletAddress"`
+	Description         string     `json:"description,omitempty"`
+	PersonalitySummary  string     `json:"personalitySummary,omitempty"`
+	MetadataPointer     string     `json:"metadataPointer,omitempty"`
+	LinkedNativeAgentID string     `json:"linkedNativeAgentId,omitempty"`
+	MintedTokenID       string     `json:"mintedTokenId,omitempty"`
+	WalletVerifiedAt    *time.Time `json:"walletVerifiedAt,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+}
+
+type ExternalAgentAuthChallenge struct {
+	ID            string    `json:"id"`
+	AgentID       string    `json:"agentId"`
+	WalletAddress string    `json:"walletAddress"`
+	ChallengeText string    `json:"challengeText"`
+	ExpiresAt     time.Time `json:"expiresAt"`
+	ConsumedAt    time.Time `json:"consumedAt,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
