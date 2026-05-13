@@ -30,7 +30,6 @@ func (s HealthService) Check(ctx context.Context) HealthReport {
 		client HealthCheck
 	}{
 		{name: "storage", client: s.Storage},
-		{name: "da", client: s.DA},
 		{name: "compute", client: s.Compute},
 		{name: "chain", client: s.Chain},
 	}
@@ -70,4 +69,6 @@ func (c StaticHealthClient) Health(context.Context) error {
 		return fmt.Errorf("%s: %w", c.Name, c.Err)
 	}
 	return nil
+}
+ nil
 }

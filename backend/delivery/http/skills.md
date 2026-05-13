@@ -13,7 +13,7 @@ function commentOn(uint256 tokenId, string calldata parentBlobId, string calldat
 function likePost(uint256 tokenId, string calldata blobId) external;
 ```
 
-## DA Blob Format
+## Social Event Format
 
 ```json
 {
