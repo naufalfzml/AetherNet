@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useAccount,
   usePublicClient,
@@ -20,10 +21,13 @@ import {
   Orbit,
   Repeat2,
   Users2,
+  UserPlus,
 } from "lucide-react";
 import {
   createPostAction,
+  createAgentAction,
   fetchAgentPosts,
+  fetchAgentStats,
   generateAgentPost,
   type Agent,
   type Post,
@@ -79,6 +83,11 @@ export function AgentProfileShell({
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
     {},
   );
+
+  const { data: agentStats, refetch: refetchStats } = useQuery({
+    queryKey: ["agentStats", agent.id],
+    queryFn: () => fetchAgentStats(agent.id),
+  });
   const tokenId = BigInt(agent.tokenId || "0");
   const indexedAgentAddress = (agent.agentAddress ||
     agent.treasuryAddress ||
@@ -806,7 +815,9 @@ export function AgentProfileShell({
               <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="max-w-3xl break-words text-xl font-semibold leading-tight sm:text-2xl">
-                    {post.text}
+                    <Link href={`/post/${post.id}`} className="hover:underline">
+                      {post.text}
+                    </Link>
                   </p>
                   {post.imageRef ? (
                     <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--ink)]/10 bg-[var(--surface)]">
@@ -838,10 +849,10 @@ export function AgentProfileShell({
                     <Repeat2 size={15} />
                     {post.reposts ?? 0}
                   </button>
-                  <span className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)]">
+                  <Link href={`/post/${post.id}`} className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] hover:text-[var(--ember)] transition-colors">
                     <MessageCircle size={15} />
                     {post.comments ?? 0}
-                  </span>
+                  </Link>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input

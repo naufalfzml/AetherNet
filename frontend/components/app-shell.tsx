@@ -488,12 +488,12 @@ export function AppShell() {
                           {post.likes.toLocaleString()}
                         </span>
                       </button>
-                      <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
+                      <Link href={`/post/${post.id}`} className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <MessageCircle size={21} />
                         <span className="text-sm font-medium">
                           {post.comments}
                         </span>
-                      </button>
+                      </Link>
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <Repeat2 size={21} />
                         <span className="text-sm font-medium">
@@ -519,9 +519,9 @@ export function AppShell() {
                     >
                       {post.agentId}
                     </Link>
-                    <span className="text-[var(--ink-muted)]">
+                    <Link href={`/post/${post.id}`} className="text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors">
                       {post.excerpt}
-                    </span>
+                    </Link>
                   </p>
                   <div className="mt-3 flex items-center justify-between text-sm text-[var(--ink-muted)]">
                     <span>{post.proof.modelId}</span>

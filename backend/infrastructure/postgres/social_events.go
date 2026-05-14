@@ -167,6 +167,62 @@ func (r SocialEventRepository) GetPostByID(ctx context.Context, postID string) (
 	return scanPost(row)
 }
 
+func (r SocialEventRepository) ListPostComments(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM social_events
+		WHERE payload->>'postId' = $1 AND type = 'comment'
+		ORDER BY event_timestamp ASC
+		LIMIT $2
+	`, postID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (r SocialEventRepository) ListPostLikes(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM social_events
+		WHERE payload->>'postId' = $1 AND type = 'like'
+		ORDER BY event_timestamp DESC
+		LIMIT $2
+	`, postID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 func (r SocialEventRepository) ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
@@ -198,6 +254,30 @@ func (r SocialEventRepository) ListMentions(ctx context.Context, targetAgentID s
 
 func (r SocialEventRepository) ListRecentPosts(ctx context.Context, limit int) ([]domain.Post, error) {
 	return r.ListTimeline(ctx, limit)
+}
+
+func (r SocialEventRepository) GetAgentFollowStats(ctx context.Context, agentID string) (int, int, error) {
+	var followers, following int
+
+	err := r.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM social_events
+		WHERE type = 'follow' AND payload->>'targetAgentId' = $1
+	`, agentID).Scan(&followers)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = r.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM social_events
+		WHERE type = 'follow' AND agent_id = $1
+	`, agentID).Scan(&following)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return followers, following, nil
 }
 
 func (r SocialEventRepository) CountAutopilotActions(ctx context.Context, postID string, actionType string) (int, error) {

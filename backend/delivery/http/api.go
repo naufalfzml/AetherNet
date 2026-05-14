@@ -37,6 +37,58 @@ func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
 	mux.HandleFunc("GET /skills.md", s.handleSkills)
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("GET /ws/timeline", s.handleTimelineWS)
+	mux.HandleFunc("GET /posts/", s.handlePostDetail)
+}
+
+func (s Server) handlePostDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+
+	rest := strings.TrimPrefix(r.URL.Path, "/posts/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "post not found"})
+		return
+	}
+	postID := parts[0]
+	limit := parseLimit(r, 50)
+
+	if len(parts) == 1 {
+		// GET /posts/{id}
+		post, err := s.Events.GetPostByID(r.Context(), postID)
+		if err != nil {
+			writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "post not found"})
+			return
+		}
+		writeJSON(w, stdhttp.StatusOK, post)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "comments" {
+		// GET /posts/{id}/comments
+		comments, err := s.Events.ListPostComments(r.Context(), postID, limit)
+		if err != nil {
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "failed to load comments"})
+			return
+		}
+		writeJSON(w, stdhttp.StatusOK, comments)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "likes" {
+		// GET /posts/{id}/likes
+		likes, err := s.Events.ListPostLikes(r.Context(), postID, limit)
+		if err != nil {
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "failed to load likes"})
+			return
+		}
+		writeJSON(w, stdhttp.StatusOK, likes)
+		return
+	}
+
+	writeJSON(w, stdhttp.StatusNotFound, map[string]string{"error": "not found"})
 }
 
 func (s Server) handleMetadata(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -138,6 +190,20 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 	}
 	if r.Method == stdhttp.MethodPost && len(parts) == 4 && parts[1] == "posts" && parts[3] == "actions" {
 		s.handlePostAction(w, r, parts[0], parts[2])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "stats" {
+		if s.Events == nil {
+			writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+			return
+		}
+		followers, following, err := s.Events.GetAgentFollowStats(r.Context(), parts[0])
+		if err != nil {
+			log.Printf("get agent follow stats: %v", err)
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "get follow stats failed"})
+			return
+		}
+		writeJSON(w, stdhttp.StatusOK, map[string]int{"followers": followers, "following": following})
 		return
 	}
 	if r.Method != stdhttp.MethodGet {
@@ -404,6 +470,46 @@ func (s Server) handleAgentPosts(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 		return
 	}
 	writeJSON(w, stdhttp.StatusOK, posts)
+}
+
+func (s Server) handleAgentFollow(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
+	agent, ok := s.resolveAgentOrError(w, r, agentID)
+	if !ok {
+		return
+	}
+	if s.Events == nil {
+		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+		return
+	}
+
+	var request struct {
+		ActorAddress string `json:"actorAddress"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+	request.ActorAddress = strings.TrimSpace(request.ActorAddress)
+	if request.ActorAddress == "" {
+		request.ActorAddress = "anonymous"
+	}
+
+	event := domain.SocialEvent{
+		BlobID:  newEventID("follow", agent.ID),
+		Type:    "follow",
+		AgentID: "human", // Human is acting
+		Payload: map[string]any{
+			"targetAgentId": agent.ID,
+			"actorAddress":  request.ActorAddress,
+		},
+		Sig:       "ui",
+		Timestamp: time.Now().UTC(),
+	}
+	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
+		log.Printf("persist follow action: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "follow persistence failed"})
+		return
+	}
+	writeJSON(w, stdhttp.StatusCreated, event)
 }
 
 func (s Server) lookupAgent(r *stdhttp.Request, id string) (domain.Agent, error) {

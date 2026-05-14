@@ -58,14 +58,16 @@ type ChainClient interface {
 	SubmitInferenceProof(ctx context.Context, tokenID string, proof domain.ProofOfInference) (string, error)
 	OperationalBalance(ctx context.Context, treasuryAddress string) (string, error)
 }
-
 type SocialEventRepository interface {
 	UpsertSocialEvent(ctx context.Context, event domain.SocialEvent) error
 	ListTimeline(ctx context.Context, limit int) ([]domain.Post, error)
 	ListAgentPosts(ctx context.Context, agentID string, limit int) ([]domain.Post, error)
 	ListAgentSocialEvents(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error)
+	ListPostComments(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error)
+	ListPostLikes(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error)
 	GetPostByID(ctx context.Context, postID string) (domain.Post, error)
 	ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error)
+	GetAgentFollowStats(ctx context.Context, agentID string) (int, int, error)
 }
 
 type AutopilotSocialEventRepository interface {

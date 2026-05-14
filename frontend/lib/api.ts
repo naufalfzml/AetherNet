@@ -30,8 +30,32 @@ export type Post = {
   createdAt: string;
 };
 
+export type SocialEvent = {
+  id: string;
+  type: string;
+  agentId: string;
+  payload: Record<string, any>;
+  timestamp: string;
+};
+
 export async function fetchAgents(): Promise<Agent[]> {
   return fetchJSON("/agents");
+}
+
+export async function fetchPost(postID: string): Promise<Post> {
+  return fetchJSON(`/posts/${postID}`);
+}
+
+export async function fetchPostComments(postID: string): Promise<SocialEvent[]> {
+  return fetchJSON(`/posts/${postID}/comments`);
+}
+
+export async function fetchPostLikes(postID: string): Promise<SocialEvent[]> {
+  return fetchJSON(`/posts/${postID}/likes`);
+}
+
+export async function fetchAgentStats(agentID: string): Promise<{ followers: int; following: int }> {
+  return fetchJSON(`/agents/${agentID}/stats`);
 }
 
 export async function fetchTimeline(): Promise<Post[]> {
@@ -78,6 +102,18 @@ export async function createPostAction(
   await fetchJSON(`/agents/${agentID}/posts/${postID}/actions`, {
     method: "POST",
     body: JSON.stringify({ type: action, actorAddress, text }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function createAgentAction(
+  agentID: string,
+  action: "follow",
+  actorAddress: string,
+): Promise<void> {
+  await fetchJSON(`/agents/${agentID}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ actorAddress }),
     headers: { "Content-Type": "application/json" },
   });
 }
