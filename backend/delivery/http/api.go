@@ -1,6 +1,8 @@
 package http
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -9,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	stdhttp "net/http"
 	"strconv"
 	"strings"
@@ -16,6 +19,11 @@ import (
 
 	"github.com/aethernet-0g/aethernet/backend/domain"
 	"github.com/aethernet-0g/aethernet/backend/usecase"
+)
+
+var (
+	minGenerateOpsWei      = big.NewInt(10_000_000_000_000_000) // 0.01 OG
+	minGenerateImageOpsWei = big.NewInt(20_000_000_000_000_000) // 0.02 OG
 )
 
 func (s Server) registerAPIRoutes(mux *stdhttp.ServeMux) {
@@ -271,13 +279,31 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 		Trigger     string `json:"trigger"`
 		WithImage   bool   `json:"withImage"`
 		ImagePrompt string `json:"imagePrompt"`
+		ActorAddress string `json:"actorAddress"`
 	}
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&request)
 	}
+	request.ActorAddress = strings.TrimSpace(request.ActorAddress)
+	if !isEVMAddress(request.ActorAddress) {
+		writeJSON(w, stdhttp.StatusForbidden, map[string]string{"error": "owner wallet address is required to generate posts"})
+		return
+	}
+	if !strings.EqualFold(request.ActorAddress, agent.OwnerAddress) {
+		writeJSON(w, stdhttp.StatusForbidden, map[string]string{"error": "only the recorded owner wallet can generate posts for this agent"})
+		return
+	}
 	trigger := strings.TrimSpace(request.Trigger)
 	if trigger == "" {
 		trigger = "manual profile run"
+	}
+	minRequired := minGenerateOpsWei
+	if request.WithImage {
+		minRequired = minGenerateImageOpsWei
+	}
+	if err := s.requireOperationalRunway(r.Context(), agent.AgentAddress, minRequired); err != nil {
+		writeJSON(w, stdhttp.StatusConflict, map[string]string{"error": err.Error()})
+		return
 	}
 
 	personality := agent.PersonalitySummary
@@ -404,6 +430,10 @@ func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
 		return
 	}
+	writeJSON(w, stdhttp.StatusForbidden, map[string]string{
+		"error": "human social actions are disabled; humans can mint, invest, and operate their own agent only",
+	})
+	return
 
 	var request struct {
 		Type         string `json:"type"`
@@ -694,4 +724,82 @@ func summarizePrompt(prompt string) string {
 		return prompt
 	}
 	return prompt[:max] + "..."
+}
+
+func (s Server) requireOperationalRunway(ctx context.Context, treasuryAddress string, minimum *big.Int) error {
+	if s.Config.StubMode {
+		return nil
+	}
+	if !isEVMAddress(treasuryAddress) {
+		return errors.New("agent treasury address is unavailable")
+	}
+	if strings.TrimSpace(s.Config.OGRPCURL) == "" {
+		return errors.New("chain rpc is unavailable for ops runway checks")
+	}
+
+	balance, err := fetchOperationalBalance(ctx, s.Config.OGRPCURL, treasuryAddress)
+	if err != nil {
+		return fmt.Errorf("failed to verify operational runway: %w", err)
+	}
+	if balance.Cmp(minimum) < 0 {
+		return fmt.Errorf("insufficient operational balance: treasury needs at least %s wei before manual generation", minimum.String())
+	}
+	return nil
+}
+
+func fetchOperationalBalance(ctx context.Context, rpcURL string, treasuryAddress string) (*big.Int, error) {
+	payload := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "eth_call",
+		"params": []any{
+			map[string]any{
+				"to":   treasuryAddress,
+				"data": "0xf865216e",
+			},
+			"latest",
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodPost, rpcURL, bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := stdhttp.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var response struct {
+		Result string `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("rpc %d: %s", response.Error.Code, response.Error.Message)
+	}
+	if response.Result == "" {
+		return nil, errors.New("empty eth_call result")
+	}
+	hexValue := strings.TrimPrefix(response.Result, "0x")
+	if hexValue == "" {
+		return big.NewInt(0), nil
+	}
+	value, ok := new(big.Int).SetString(hexValue, 16)
+	if !ok {
+		return nil, errors.New("invalid operational balance hex result")
+	}
+	return value, nil
 }

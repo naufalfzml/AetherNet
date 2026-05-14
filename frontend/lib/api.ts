@@ -109,7 +109,11 @@ export async function fetchAgentPosts(agentID: string): Promise<Post[]> {
 
 export async function generateAgentPost(
   agentID: string,
-  options: { withImage?: boolean; imagePrompt?: string } = {},
+  options: {
+    withImage?: boolean;
+    imagePrompt?: string;
+    actorAddress?: string;
+  } = {},
 ): Promise<Post> {
   return fetchJSON(`/agents/${agentID}/generate-post`, {
     method: "POST",
@@ -117,6 +121,7 @@ export async function generateAgentPost(
       trigger: "profile post generation",
       withImage: options.withImage ?? false,
       imagePrompt: options.imagePrompt ?? "",
+      actorAddress: options.actorAddress ?? "",
     }),
     headers: { "Content-Type": "application/json" },
   });

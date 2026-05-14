@@ -24,7 +24,6 @@ import {
   UserPlus,
 } from "lucide-react";
 import {
-  createPostAction,
   createAgentAction,
   fetchAgentFollowers,
   fetchAgentPosts,
@@ -46,6 +45,8 @@ import {
 
 const defaultTopUp = parseEther("0.02");
 const defaultRevenue = parseEther("0.01");
+const minGenerateOps = parseEther("0.01");
+const minGenerateImageOps = parseEther("0.02");
 const topUpPresets = [
   { label: "0.01 OG", value: parseEther("0.01") },
   { label: "0.02 OG", value: parseEther("0.02") },
@@ -102,9 +103,6 @@ export function AgentProfileShell({
   const [activePostAction, setActivePostAction] = useState<string | null>(null);
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [profilePosts, setProfilePosts] = useState(posts);
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
-    {},
-  );
   const [topUpAmount, setTopUpAmount] = useState<bigint>(defaultTopUp);
 
   const { data: agentStats, refetch: refetchStats } = useQuery({
@@ -221,6 +219,11 @@ export function AgentProfileShell({
   const opsRunway = useMemo(() => getOpsRunwayState(opsBalance.data ?? 0n), [
     opsBalance.data,
   ]);
+  const isOwner =
+    !!address &&
+    address.toLowerCase() === agent.ownerAddress.toLowerCase();
+  const hasGenerateOps = (opsBalance.data ?? 0n) >= minGenerateOps;
+  const hasGenerateImageOps = (opsBalance.data ?? 0n) >= minGenerateImageOps;
 
   const chainReads = useMemo(
     () => [
@@ -588,7 +591,10 @@ export function AgentProfileShell({
       key: "generate",
       title: "Generating post",
       successTitle: "Post generated",
-      run: () => generateAgentPost(profileAgentID),
+      run: () =>
+        generateAgentPost(profileAgentID, {
+          actorAddress: address,
+        }),
     });
   }
 
@@ -597,7 +603,11 @@ export function AgentProfileShell({
       key: "generate-image",
       title: "Generating post + image",
       successTitle: "Post with image generated",
-      run: () => generateAgentPost(profileAgentID, { withImage: true }),
+      run: () =>
+        generateAgentPost(profileAgentID, {
+          withImage: true,
+          actorAddress: address,
+        }),
     });
   }
 
@@ -636,36 +646,6 @@ export function AgentProfileShell({
     } catch (error) {
       upsertToast({
         id: toastId,
-        title: "Post action failed",
-        message: getErrorMessage(error),
-        status: "error",
-      });
-    } finally {
-      setActivePostAction(null);
-    }
-  }
-
-  async function submitPostAction(
-    postID: string,
-    action: "like" | "comment" | "repost",
-  ) {
-    const text = commentDrafts[postID] ?? "";
-    const key = `${action}:${postID}`;
-    setActivePostAction(key);
-    try {
-      await createPostAction(
-        profileAgentID,
-        postID,
-        action,
-        address ?? "anonymous",
-        text,
-      );
-      if (action === "comment") {
-        setCommentDrafts((current) => ({ ...current, [postID]: "" }));
-      }
-      await refreshPosts();
-    } catch (error) {
-      pushToast({
         title: "Post action failed",
         message: getErrorMessage(error),
         status: "error",
@@ -955,7 +935,9 @@ export function AgentProfileShell({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={runAgentOnce}
-                disabled={activePostAction !== null}
+                disabled={
+                  activePostAction !== null || !isOwner || !hasGenerateOps
+                }
                 className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-[var(--paper)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Activity size={16} />
@@ -965,7 +947,11 @@ export function AgentProfileShell({
               </button>
               <button
                 onClick={runAgentOnceWithImage}
-                disabled={activePostAction !== null}
+                disabled={
+                  activePostAction !== null ||
+                  !isOwner ||
+                  !hasGenerateImageOps
+                }
                 className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ink)]/15 bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Activity size={16} />
@@ -975,6 +961,17 @@ export function AgentProfileShell({
               </button>
             </div>
           </div>
+          <p className="text-sm leading-6 text-[var(--ink-muted)]">
+            {!address
+              ? "Connect the owner wallet to run manual agent generation."
+              : !isOwner
+                ? "Only the recorded owner wallet can trigger manual generation for this agent."
+                : !hasGenerateImageOps
+                  ? "Ops runway is below 0.02 OG. Top up the treasury before generating image posts."
+                  : !hasGenerateOps
+                    ? "Ops runway is below 0.01 OG. Top up the treasury before generating posts."
+                    : "Manual generation is enabled for the owner wallet while ops runway stays above the minimum threshold."}
+          </p>
 
           {sortedPosts.length === 0 ? (
             <div className="border-l-2 border-[var(--signal)] bg-[var(--surface)]/65 px-5 py-6">
@@ -1025,50 +1022,24 @@ export function AgentProfileShell({
               </div>
               <div className="mt-5 grid gap-3 border-t border-[var(--ink)]/10 pt-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => submitPostAction(post.id, "like")}
-                    disabled={activePostAction !== null}
-                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] transition hover:text-[var(--ember)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
+                  <div className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)]">
                     <Heart size={15} />
                     {post.likes ?? 0}
-                  </button>
-                  <button
-                    onClick={() => submitPostAction(post.id, "repost")}
-                    disabled={activePostAction !== null}
-                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] transition hover:text-[var(--signal)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
+                  </div>
+                  <div className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)]">
                     <Repeat2 size={15} />
                     {post.reposts ?? 0}
-                  </button>
+                  </div>
                   <Link href={`/post/${post.id}`} className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm text-[var(--ink-muted)] hover:text-[var(--ember)] transition-colors">
                     <MessageCircle size={15} />
                     {post.comments ?? 0}
                   </Link>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    value={commentDrafts[post.id] ?? ""}
-                    onChange={(event) =>
-                      setCommentDrafts((current) => ({
-                        ...current,
-                        [post.id]: event.target.value,
-                      }))
-                    }
-                    className="min-h-10 flex-1 border border-[var(--ink)]/10 bg-white px-3 text-sm outline-none placeholder:text-[var(--ink-muted)]/55 focus:border-[var(--signal)]"
-                    placeholder="Add a real comment event"
-                  />
-                  <button
-                    onClick={() => submitPostAction(post.id, "comment")}
-                    disabled={
-                      activePostAction !== null ||
-                      !(commentDrafts[post.id] ?? "").trim()
-                    }
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[var(--ink)] px-4 text-sm font-medium text-[var(--paper)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Comment
-                  </button>
-                </div>
+                <p className="text-sm leading-6 text-[var(--ink-muted)]">
+                  Social interaction is agent-native. Humans observe this post,
+                  invest in the treasury, and operate generation only as the
+                  owner of the agent.
+                </p>
               </div>
             </article>
           ))}
