@@ -200,6 +200,33 @@ func (r fakeEventRepo) ListAgentFollowers(_ context.Context, agentID string, _ i
 	return out, nil
 }
 
+func (r fakeEventRepo) ListWalletFollowing(_ context.Context, actorAddress string, _ int) ([]domain.SocialEvent, error) {
+	out := make([]domain.SocialEvent, 0)
+	for _, event := range r.events {
+		if event.Type != "follow" {
+			continue
+		}
+		if value, ok := event.Payload["actorAddress"].(string); ok && strings.EqualFold(value, actorAddress) {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
+func (r fakeEventRepo) HasWalletFollowedAgent(_ context.Context, actorAddress string, targetAgentID string) (bool, error) {
+	for _, event := range r.events {
+		if event.Type != "follow" {
+			continue
+		}
+		value, _ := event.Payload["actorAddress"].(string)
+		target, _ := event.Payload["targetAgentId"].(string)
+		if strings.EqualFold(value, actorAddress) && target == targetAgentID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r fakeEventRepo) GetPostByID(_ context.Context, postID string) (domain.Post, error) {
 	for _, post := range r.timeline {
 		if post.ID == postID {
@@ -521,6 +548,121 @@ func TestMetadataEndpointRejectsRealModeWithoutStorage(t *testing.T) {
 	}
 	if repo.metadata.MetadataPointer != "" {
 		t.Fatalf("metadata should not be stored on real-mode storage failure: %#v", repo.metadata)
+	}
+}
+
+func TestAgentFollowRequiresWalletAddress(t *testing.T) {
+	events := &capturingEventRepo{}
+	server := Server{
+		Config: config.Config{StubMode: false},
+		Agents: fakeAgentRepo{agents: []domain.Agent{{
+			ID:           "agent-1",
+			TokenID:      "1",
+			OwnerAddress: "0x1111111111111111111111111111111111111111",
+			AgentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}}},
+		Events: events,
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(stdhttp.MethodPost, "/agents/agent-1/follow", strings.NewReader(`{"actorAddress":""}`))
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if len(events.events) != 0 {
+		t.Fatalf("expected no persisted events, got %#v", events.events)
+	}
+}
+
+func TestAgentFollowDuplicateIsNoOp(t *testing.T) {
+	actor := "0x722550bb8ec6416522afe9eaf446f0de3262f701"
+	repo := &capturingEventRepo{
+		fakeEventRepo: fakeEventRepo{
+			events: []domain.SocialEvent{{
+				BlobID:  "follow-existing",
+				Type:    "follow",
+				AgentID: "human",
+				Payload: map[string]any{
+					"targetAgentId": "agent-1",
+					"actorAddress":  actor,
+				},
+			}},
+		},
+	}
+	server := Server{
+		Config: config.Config{StubMode: false},
+		Agents: fakeAgentRepo{agents: []domain.Agent{{
+			ID:           "agent-1",
+			TokenID:      "1",
+			OwnerAddress: "0x1111111111111111111111111111111111111111",
+			AgentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}}},
+		Events: repo,
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(stdhttp.MethodPost, "/agents/agent-1/follow", strings.NewReader(fmt.Sprintf(`{"actorAddress":"%s"}`, actor)))
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if len(repo.events) != 1 {
+		t.Fatalf("expected duplicate follow to stay at 1 event, got %d", len(repo.events))
+	}
+}
+
+func TestWalletFollowingReturnsFollowedAgents(t *testing.T) {
+	actor := "0x722550bb8ec6416522afe9eaf446f0de3262f701"
+	server := Server{
+		Config: config.Config{StubMode: false},
+		Agents: fakeAgentRepo{agents: []domain.Agent{
+			{
+				ID:           "agent-1",
+				TokenID:      "1",
+				OwnerAddress: "0x1111111111111111111111111111111111111111",
+				AgentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			},
+			{
+				ID:           "agent-2",
+				TokenID:      "2",
+				OwnerAddress: "0x2222222222222222222222222222222222222222",
+				AgentAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			},
+		}},
+		Events: fakeEventRepo{
+			events: []domain.SocialEvent{
+				{
+					BlobID:  "follow-1",
+					Type:    "follow",
+					AgentID: "human",
+					Payload: map[string]any{"targetAgentId": "agent-1", "actorAddress": actor},
+				},
+				{
+					BlobID:  "follow-2",
+					Type:    "follow",
+					AgentID: "human",
+					Payload: map[string]any{"targetAgentId": "agent-2", "actorAddress": actor},
+				},
+			},
+		},
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(stdhttp.MethodGet, "/agents/"+actor+"/following", nil)
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != stdhttp.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var agents []domain.Agent
+	if err := json.NewDecoder(recorder.Body).Decode(&agents); err != nil {
+		t.Fatal(err)
+	}
+	if len(agents) != 2 || agents[0].ID != "agent-1" || agents[1].ID != "agent-2" {
+		t.Fatalf("unexpected followed agents: %#v", agents)
 	}
 }
 

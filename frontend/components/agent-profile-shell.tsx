@@ -28,6 +28,7 @@ import {
   fetchAgentFollowers,
   fetchAgentPosts,
   fetchAgentStats,
+  fetchWalletFollowing,
   generateAgentPost,
   type Agent,
   type Post,
@@ -44,7 +45,6 @@ import {
 } from "@/components/transaction-toasts";
 
 const defaultTopUp = parseEther("0.02");
-const defaultRevenue = parseEther("0.01");
 const minGenerateOps = parseEther("0.01");
 const minGenerateImageOps = parseEther("0.02");
 const topUpPresets = [
@@ -112,6 +112,11 @@ export function AgentProfileShell({
   const { data: followers = [] } = useQuery({
     queryKey: ["agentFollowers", agent.id],
     queryFn: () => fetchAgentFollowers(agent.id),
+  });
+  const { data: walletFollowing = [] } = useQuery({
+    queryKey: ["walletFollowing", address],
+    queryFn: () => fetchWalletFollowing(address!),
+    enabled: Boolean(address),
   });
   const tokenId = BigInt(agent.tokenId || "0");
   const indexedAgentAddress = (agent.agentAddress ||
@@ -222,6 +227,18 @@ export function AgentProfileShell({
   const isOwner =
     !!address &&
     address.toLowerCase() === agent.ownerAddress.toLowerCase();
+  const isAlreadyFollowing = useMemo(() => {
+    if (!address) return false;
+    return walletFollowing.some((followedAgent) => {
+      const target = (followedAgent.agentAddress ||
+        followedAgent.treasuryAddress ||
+        followedAgent.id).toLowerCase();
+      return (
+        followedAgent.id.toLowerCase() === agent.id.toLowerCase() ||
+        target === profileAgentID.toLowerCase()
+      );
+    });
+  }, [address, agent.id, profileAgentID, walletFollowing]);
   const hasGenerateOps = (opsBalance.data ?? 0n) >= minGenerateOps;
   const hasGenerateImageOps = (opsBalance.data ?? 0n) >= minGenerateImageOps;
 
@@ -440,44 +457,42 @@ export function AgentProfileShell({
     });
   }
 
-  async function testRevenue() {
-    await runTransaction({
-      action: "revenue",
-      processingTitle: "Sending test revenue",
-      successTitle: "Revenue distributed",
-      errorTitle: "Revenue test failed",
-      startMessage: `Waiting for wallet approval for ${formatEther(defaultRevenue)} OG.`,
-      run: () =>
-        writeContractAsync({
-          address: agentAddress,
-          abi: treasuryAbi,
-          functionName: "subscribe",
-          args: [],
-          value: defaultRevenue,
-        }),
-    });
-  }
-
   async function followAgent() {
-    const actorAddress = address ?? "anonymous";
+    if (!address) {
+      pushToast({
+        title: "Follow failed",
+        message: "Connect your wallet before following an agent.",
+        status: "error",
+      });
+      return;
+    }
     const toastId = Date.now();
     setActiveAction("follow");
     upsertToast({
       id: toastId,
-      title: "Following agent",
-      message: "Writing a real follow event to AetherNet.",
+      title: isAlreadyFollowing ? "Unfollowing agent" : "Following agent",
+      message: isAlreadyFollowing
+        ? "Removing the wallet follow state from AetherNet."
+        : "Writing a real follow event to AetherNet.",
       status: "processing",
     });
     try {
-      await createAgentAction(profileAgentID, "follow", actorAddress);
+      await createAgentAction(
+        profileAgentID,
+        isAlreadyFollowing ? "unfollow" : "follow",
+        address,
+      );
       await Promise.all([
         refetchStats(),
         queryClient.invalidateQueries({ queryKey: ["agentFollowers", agent.id] }),
+        queryClient.invalidateQueries({ queryKey: ["walletFollowing", address] }),
       ]);
       upsertToast({
         id: toastId,
-        title: "Follow recorded",
-        message: "Recent followers are now updated from the social event log.",
+        title: isAlreadyFollowing ? "Unfollow recorded" : "Follow recorded",
+        message: isAlreadyFollowing
+          ? "This wallet no longer tracks the agent in your dashboard."
+          : "This wallet now tracks the agent in your dashboard.",
         status: "success",
       });
       window.setTimeout(() => dismissToast(toastId), 5_000);
@@ -735,7 +750,11 @@ export function AgentProfileShell({
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/12 bg-white/8 px-5 py-2 text-sm font-medium text-white transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <UserPlus size={16} />
-                {activeAction === "follow" ? "Following..." : "Follow agent"}
+                {activeAction === "follow"
+                  ? "Following..."
+                  : isAlreadyFollowing
+                    ? "Unfollow agent"
+                    : "Follow agent"}
               </button>
             </div>
           </div>
@@ -877,34 +896,6 @@ export function AgentProfileShell({
                     {claimable.data
                       ? `${formatEther(claimable.data)} OG`
                       : "0 OG"}
-                  </span>
-                </button>
-                <button
-                  onClick={() => topUpOps()}
-                  disabled={
-                    !isConnected || !hasAgentAddress || activeAction !== null
-                  }
-                  className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-[var(--signal)]/45 bg-[var(--signal)]/12 px-4 py-2 text-sm font-medium text-[var(--signal)] transition hover:bg-[var(--signal)]/18 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>
-                    {activeAction === "topup" ? "Funding..." : "Top up ops"}
-                  </span>
-                  <span className="mono text-xs text-[var(--signal)]/75">
-                    {formatEther(topUpAmount)} OG
-                  </span>
-                </button>
-                <button
-                  onClick={testRevenue}
-                  disabled={
-                    !isConnected || !hasAgentAddress || activeAction !== null
-                  }
-                  className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-[var(--ember)]/45 bg-[var(--ember)]/12 px-4 py-2 text-sm font-medium text-[var(--ember)] transition hover:bg-[var(--ember)]/18 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>
-                    {activeAction === "revenue" ? "Sending..." : "Test revenue"}
-                  </span>
-                  <span className="mono text-xs text-[var(--ember)]/75">
-                    {formatEther(defaultRevenue)} OG
                   </span>
                 </button>
               </div>

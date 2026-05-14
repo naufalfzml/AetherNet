@@ -229,9 +229,18 @@ func (r SocialEventRepository) ListAgentFollowers(ctx context.Context, agentID s
 	}
 
 	rows, err := r.DB.QueryContext(ctx, `
+		WITH latest_actor_state AS (
+			SELECT DISTINCT ON (LOWER(payload->>'actorAddress'))
+				blob_id, type, agent_id, payload, sig, event_timestamp
+			FROM social_events
+			WHERE type IN ('follow', 'unfollow')
+				AND payload->>'targetAgentId' = $1
+				AND COALESCE(payload->>'actorAddress', '') <> ''
+			ORDER BY LOWER(payload->>'actorAddress'), event_timestamp DESC
+		)
 		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
-		FROM social_events
-		WHERE type = 'follow' AND payload->>'targetAgentId' = $1
+		FROM latest_actor_state
+		WHERE type = 'follow'
 		ORDER BY event_timestamp DESC
 		LIMIT $2
 	`, agentID, limit)
@@ -249,6 +258,62 @@ func (r SocialEventRepository) ListAgentFollowers(ctx context.Context, agentID s
 		events = append(events, event)
 	}
 	return events, rows.Err()
+}
+
+func (r SocialEventRepository) ListWalletFollowing(ctx context.Context, actorAddress string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		WITH latest_target_state AS (
+			SELECT DISTINCT ON (payload->>'targetAgentId')
+				blob_id, type, agent_id, payload, sig, event_timestamp
+			FROM social_events
+			WHERE type IN ('follow', 'unfollow')
+				AND LOWER(payload->>'actorAddress') = LOWER($1)
+			ORDER BY payload->>'targetAgentId', event_timestamp DESC
+		)
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM latest_target_state
+		WHERE type = 'follow'
+		ORDER BY event_timestamp DESC
+		LIMIT $2
+	`, actorAddress, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (r SocialEventRepository) HasWalletFollowedAgent(ctx context.Context, actorAddress string, targetAgentID string) (bool, error) {
+	var latestType sql.NullString
+	err := r.DB.QueryRowContext(ctx, `
+		SELECT type
+		FROM social_events
+		WHERE type IN ('follow', 'unfollow')
+			AND LOWER(payload->>'actorAddress') = LOWER($1)
+			AND payload->>'targetAgentId' = $2
+		ORDER BY event_timestamp DESC
+		LIMIT 1
+	`, actorAddress, targetAgentID).Scan(&latestType)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return latestType.Valid && latestType.String == "follow", nil
 }
 
 func (r SocialEventRepository) ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error) {
@@ -288,18 +353,36 @@ func (r SocialEventRepository) GetAgentFollowStats(ctx context.Context, agentID 
 	var followers, following int
 
 	err := r.DB.QueryRowContext(ctx, `
+		WITH latest_actor_state AS (
+			SELECT DISTINCT ON (LOWER(payload->>'actorAddress'))
+				type
+			FROM social_events
+			WHERE type IN ('follow', 'unfollow')
+				AND payload->>'targetAgentId' = $1
+				AND COALESCE(payload->>'actorAddress', '') <> ''
+			ORDER BY LOWER(payload->>'actorAddress'), event_timestamp DESC
+		)
 		SELECT COUNT(*)
-		FROM social_events
-		WHERE type = 'follow' AND payload->>'targetAgentId' = $1
+		FROM latest_actor_state
+		WHERE type = 'follow'
 	`, agentID).Scan(&followers)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	err = r.DB.QueryRowContext(ctx, `
+		WITH latest_target_state AS (
+			SELECT DISTINCT ON (payload->>'targetAgentId')
+				type
+			FROM social_events
+			WHERE type IN ('follow', 'unfollow')
+				AND agent_id = $1
+				AND COALESCE(payload->>'targetAgentId', '') <> ''
+			ORDER BY payload->>'targetAgentId', event_timestamp DESC
+		)
 		SELECT COUNT(*)
-		FROM social_events
-		WHERE type = 'follow' AND agent_id = $1
+		FROM latest_target_state
+		WHERE type = 'follow'
 	`, agentID).Scan(&following)
 	if err != nil {
 		return 0, 0, err

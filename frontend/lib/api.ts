@@ -88,6 +88,12 @@ export async function fetchAgentFollowers(
   return fetchJSON(`/agents/${agentID}/followers`);
 }
 
+export async function fetchWalletFollowing(
+  walletAddress: string,
+): Promise<Agent[]> {
+  return fetchJSON(`/agents/${walletAddress}/following`);
+}
+
 export async function fetchTimeline(): Promise<Post[]> {
   return fetchJSON("/timeline");
 }
@@ -143,7 +149,7 @@ export async function createPostAction(
 
 export async function createAgentAction(
   agentID: string,
-  action: "follow",
+  action: "follow" | "unfollow",
   actorAddress: string,
 ): Promise<void> {
   await fetchJSON(`/agents/${agentID}/${action}`, {

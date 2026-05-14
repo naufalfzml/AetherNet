@@ -200,6 +200,10 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		s.handleAgentFollow(w, r, parts[0])
 		return
 	}
+	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "unfollow" {
+		s.handleAgentUnfollow(w, r, parts[0])
+		return
+	}
 	if r.Method == stdhttp.MethodPost && len(parts) == 4 && parts[1] == "posts" && parts[3] == "actions" {
 		s.handlePostAction(w, r, parts[0], parts[2])
 		return
@@ -230,6 +234,51 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 			return
 		}
 		writeJSON(w, stdhttp.StatusOK, followers)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "following" {
+		if s.Events == nil || s.Agents == nil {
+			writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "follow storage unavailable"})
+			return
+		}
+		if !isEVMAddress(parts[0]) {
+			writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "wallet address is invalid"})
+			return
+		}
+		events, err := s.Events.ListWalletFollowing(r.Context(), parts[0], parseLimit(r, 100))
+		if err != nil {
+			log.Printf("list wallet following: %v", err)
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list following failed"})
+			return
+		}
+		targetIDs := make([]string, 0, len(events))
+		seen := make(map[string]struct{}, len(events))
+		for _, event := range events {
+			targetAgentID, _ := event.Payload["targetAgentId"].(string)
+			targetAgentID = strings.TrimSpace(targetAgentID)
+			if targetAgentID == "" {
+				continue
+			}
+			if _, exists := seen[targetAgentID]; exists {
+				continue
+			}
+			seen[targetAgentID] = struct{}{}
+			targetIDs = append(targetIDs, targetAgentID)
+		}
+		followedAgents := make([]domain.Agent, 0, len(targetIDs))
+		for _, targetID := range targetIDs {
+			agent, err := s.lookupAgent(r, targetID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				log.Printf("resolve followed agent: %v", err)
+				writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "resolve followed agent failed"})
+				return
+			}
+			followedAgents = append(followedAgents, agent)
+		}
+		writeJSON(w, stdhttp.StatusOK, followedAgents)
 		return
 	}
 	if r.Method != stdhttp.MethodGet {
@@ -470,6 +519,14 @@ func (s Server) handleAgentPosts(w stdhttp.ResponseWriter, r *stdhttp.Request, a
 }
 
 func (s Server) handleAgentFollow(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
+	s.handleAgentFollowStateChange(w, r, agentID, "follow")
+}
+
+func (s Server) handleAgentUnfollow(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string) {
+	s.handleAgentFollowStateChange(w, r, agentID, "unfollow")
+}
+
+func (s Server) handleAgentFollowStateChange(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string, actionType string) {
 	agent, ok := s.resolveAgentOrError(w, r, agentID)
 	if !ok {
 		return
@@ -486,13 +543,28 @@ func (s Server) handleAgentFollow(w stdhttp.ResponseWriter, r *stdhttp.Request, 
 		_ = json.NewDecoder(r.Body).Decode(&request)
 	}
 	request.ActorAddress = strings.TrimSpace(request.ActorAddress)
-	if request.ActorAddress == "" {
-		request.ActorAddress = "anonymous"
+	if !isEVMAddress(request.ActorAddress) {
+		writeJSON(w, stdhttp.StatusForbidden, map[string]string{"error": "connected wallet address is required to follow agents"})
+		return
+	}
+	isFollowing, err := s.Events.HasWalletFollowedAgent(r.Context(), request.ActorAddress, agent.ID)
+	if err != nil {
+		log.Printf("check follow state: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "follow lookup failed"})
+		return
+	}
+	if actionType == "follow" && isFollowing {
+		writeJSON(w, stdhttp.StatusOK, map[string]string{"status": "already_following"})
+		return
+	}
+	if actionType == "unfollow" && !isFollowing {
+		writeJSON(w, stdhttp.StatusOK, map[string]string{"status": "already_unfollowed"})
+		return
 	}
 
 	event := domain.SocialEvent{
-		BlobID:  newEventID("follow", agent.ID),
-		Type:    "follow",
+		BlobID:  newEventID(actionType, agent.ID),
+		Type:    actionType,
 		AgentID: "human", // Human is acting
 		Payload: map[string]any{
 			"targetAgentId": agent.ID,
@@ -502,8 +574,8 @@ func (s Server) handleAgentFollow(w stdhttp.ResponseWriter, r *stdhttp.Request, 
 		Timestamp: time.Now().UTC(),
 	}
 	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
-		log.Printf("persist follow action: %v", err)
-		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "follow persistence failed"})
+		log.Printf("persist %s action: %v", actionType, err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": actionType + " persistence failed"})
 		return
 	}
 	writeJSON(w, stdhttp.StatusCreated, event)

@@ -66,6 +66,8 @@ type SocialEventRepository interface {
 	ListPostComments(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error)
 	ListPostLikes(ctx context.Context, postID string, limit int) ([]domain.SocialEvent, error)
 	ListAgentFollowers(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error)
+	ListWalletFollowing(ctx context.Context, actorAddress string, limit int) ([]domain.SocialEvent, error)
+	HasWalletFollowedAgent(ctx context.Context, actorAddress string, targetAgentID string) (bool, error)
 	GetPostByID(ctx context.Context, postID string) (domain.Post, error)
 	ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error)
 	GetAgentFollowStats(ctx context.Context, agentID string) (int, int, error)

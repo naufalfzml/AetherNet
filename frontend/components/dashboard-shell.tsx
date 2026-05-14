@@ -19,10 +19,11 @@ import {
   ChevronRight,
   Coins,
   Fuel,
+  Search,
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { fetchAgents } from "@/lib/api";
+import { fetchAgents, fetchWalletFollowing } from "@/lib/api";
 import { treasuryAbi } from "@/lib/abi";
 import { shorten, formatRelativeTime } from "@/lib/feed-view";
 import { WalletBar } from "@/components/wallet-bar";
@@ -98,11 +99,22 @@ export function DashboardShell() {
   const [agentFilter, setAgentFilter] = useState<
     "all" | "critical" | "low" | "healthy"
   >("all");
+  const [agentSearch, setAgentSearch] = useState("");
   const [agentSort, setAgentSort] = useState<
     "latest" | "lowest-ops" | "alphabetical"
   >("latest");
   const [agentPage, setAgentPage] = useState(1);
+  const [positionSort, setPositionSort] = useState<
+    "claimable" | "exit-value" | "alphabetical"
+  >("claimable");
+  const [positionPage, setPositionPage] = useState(1);
+  const [followingPage, setFollowingPage] = useState(1);
   const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
+  const followingQuery = useQuery({
+    queryKey: ["walletFollowing", address],
+    queryFn: () => fetchWalletFollowing(address!),
+    enabled: Boolean(address),
+  });
 
   const allAgents = useMemo(
     () => (agentsQuery.data ?? []).filter((agent) => toAddress(agent.agentAddress || agent.treasuryAddress)),
@@ -218,7 +230,14 @@ export function DashboardShell() {
   }, [opsSort, ownedPositions]);
 
   const filteredAgents = useMemo(() => {
+    const query = agentSearch.trim().toLowerCase();
     return ownedPositions.filter((position) => {
+      const matchesSearch =
+        query === "" ||
+        position.agent.id.toLowerCase().includes(query) ||
+        position.agent.personalitySummary.toLowerCase().includes(query) ||
+        position.agent.ownerAddress.toLowerCase().includes(query);
+      if (!matchesSearch) return false;
       if (agentFilter === "critical") {
         return position.operationalBalance < opsCriticalThreshold;
       }
@@ -233,7 +252,7 @@ export function DashboardShell() {
       }
       return true;
     });
-  }, [agentFilter, ownedPositions]);
+  }, [agentFilter, agentSearch, ownedPositions]);
 
   const sortedAgents = useMemo(() => {
     return [...filteredAgents].sort((a, b) => {
@@ -259,8 +278,37 @@ export function DashboardShell() {
     return sortedAgents.slice(start, start + pageSize);
   }, [agentPage, sortedAgents]);
 
+  const sortedPositions = useMemo(() => {
+    return [...investedPositions].sort((a, b) => {
+      if (positionSort === "alphabetical") {
+        return a.agent.id.localeCompare(b.agent.id);
+      }
+      if (positionSort === "exit-value") {
+        return Number(b.exitValue - a.exitValue);
+      }
+      return Number(b.claimable - a.claimable);
+    });
+  }, [investedPositions, positionSort]);
+
+  const pagedPositions = useMemo(() => {
+    const start = (positionPage - 1) * pageSize;
+    return sortedPositions.slice(start, start + pageSize);
+  }, [positionPage, sortedPositions]);
+  const pagedFollowing = useMemo(() => {
+    const start = (followingPage - 1) * pageSize;
+    return (followingQuery.data ?? []).slice(start, start + pageSize);
+  }, [followingPage, followingQuery.data]);
+
   const opsPageCount = Math.max(1, Math.ceil(criticalAgents.length / pageSize));
   const agentPageCount = Math.max(1, Math.ceil(sortedAgents.length / pageSize));
+  const positionPageCount = Math.max(
+    1,
+    Math.ceil(sortedPositions.length / pageSize),
+  );
+  const followingPageCount = Math.max(
+    1,
+    Math.ceil((followingQuery.data ?? []).length / pageSize),
+  );
 
   const portfolioSummary = useMemo(() => {
     const totalClaimable = investedPositions.reduce(
@@ -284,7 +332,15 @@ export function DashboardShell() {
 
   useEffect(() => {
     setAgentPage(1);
-  }, [agentFilter, agentSort, sortedAgents.length]);
+  }, [agentFilter, agentSearch, agentSort, sortedAgents.length]);
+
+  useEffect(() => {
+    setPositionPage(1);
+  }, [positionSort, sortedPositions.length]);
+
+  useEffect(() => {
+    setFollowingPage(1);
+  }, [followingQuery.data?.length]);
 
   function upsertToast(toast: TxToast) {
     setToasts((current) => {
@@ -445,6 +501,15 @@ export function DashboardShell() {
       setActiveAction(null);
     }
   }
+
+  const topDividendAgents = useMemo(
+    () =>
+      [...sortedPositions]
+        .filter((position) => position.claimable > 0n)
+        .sort((a, b) => Number(b.claimable - a.claimable))
+        .slice(0, 3),
+    [sortedPositions],
+  );
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -637,7 +702,111 @@ export function DashboardShell() {
                       icon={<Wallet size={18} />}
                     />
                   </div>
+
+                  <div className="border border-black/10 bg-white/72 px-5 py-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">Top dividend generators</h3>
+                        <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                          Ranked by claimable dividends available right now.
+                        </p>
+                      </div>
+                    </div>
+                    {topDividendAgents.length === 0 ? (
+                      <p className="mt-4 text-sm text-[var(--ink-muted)]">
+                        No live dividend generators yet.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {topDividendAgents.map((position, index) => (
+                          <div
+                            key={position.agent.id}
+                            className="grid grid-cols-[auto,1fr,auto] items-center gap-3 border-t border-black/8 pt-3 first:border-t-0 first:pt-0"
+                          >
+                            <span className="mono text-xs text-black/38">
+                              0{index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">
+                                {position.agent.id}
+                              </p>
+                              <p className="truncate text-xs text-[var(--ink-muted)]">
+                                {position.shares.toString()} shares held
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold">
+                              {formatOg(position.claimable)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </section>
+
+              <section className="grid gap-4">
+                <div>
+                  <h2 className="text-2xl font-semibold">Following</h2>
+                  <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                    Agents this wallet has explicitly followed on the social layer.
+                  </p>
+                </div>
+
+                {followingQuery.isPending ? (
+                  <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
+                    Resolving followed agents...
+                  </div>
+                ) : !followingQuery.data || followingQuery.data.length === 0 ? (
+                  <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
+                    This wallet has not followed any agents yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {pagedFollowing.map((agent) => (
+                        <div
+                          key={agent.id}
+                          className="min-w-0 border border-black/10 bg-white/72 px-5 py-5"
+                        >
+                          <Link
+                            href={agentProfilePath(agent)}
+                            className="block break-words text-lg font-semibold transition hover:text-[var(--ember)]"
+                          >
+                            {agent.id}
+                          </Link>
+                          <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
+                            {agent.personalitySummary}
+                          </p>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <DashboardStat
+                              label="Owner"
+                              value={shorten(agent.ownerAddress)}
+                              mono
+                            />
+                            <DashboardStat
+                              label="Token"
+                              value={`#${agent.tokenId}`}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <PaginationRow
+                      page={followingPage}
+                      pageCount={followingPageCount}
+                      itemCount={(followingQuery.data ?? []).length}
+                      onPrev={() =>
+                        setFollowingPage((page) => Math.max(1, page - 1))
+                      }
+                      onNext={() =>
+                        setFollowingPage((page) =>
+                          Math.min(followingPageCount, page + 1),
+                        )
+                      }
+                    />
+                  </div>
+                )}
               </section>
 
               <section className="grid gap-10 lg:grid-cols-[1fr,1fr]">
@@ -650,6 +819,18 @@ export function DashboardShell() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search
+                          size={15}
+                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black/35"
+                        />
+                        <input
+                          value={agentSearch}
+                          onChange={(event) => setAgentSearch(event.target.value)}
+                          placeholder="Search agents"
+                          className="h-10 w-48 border border-black/10 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-black/25"
+                        />
+                      </div>
                       <label className="text-xs uppercase tracking-[0.18em] text-black/38">
                         Filter
                       </label>
@@ -772,24 +953,47 @@ export function DashboardShell() {
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold">Open positions</h2>
-                    <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                      Every treasury where this wallet still holds shares or claimable yield.
-                    </p>
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-semibold">Open positions</h2>
+                      <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                        Every treasury where this wallet still holds shares or claimable yield.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs uppercase tracking-[0.18em] text-black/38">
+                        Sort
+                      </label>
+                      <select
+                        value={positionSort}
+                        onChange={(event) =>
+                          setPositionSort(
+                            event.target.value as
+                              | "claimable"
+                              | "exit-value"
+                              | "alphabetical",
+                          )
+                        }
+                        className="h-10 border border-black/10 bg-white px-3 text-sm"
+                      >
+                        <option value="claimable">Highest claimable</option>
+                        <option value="exit-value">Highest exit value</option>
+                        <option value="alphabetical">Alphabetical</option>
+                      </select>
+                    </div>
                   </div>
 
                   {portfolioReads.isPending ? (
                     <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
                       Resolving treasury balances...
                     </div>
-                  ) : investedPositions.length === 0 ? (
+                  ) : sortedPositions.length === 0 ? (
                     <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
                       No active share positions yet.
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {investedPositions.map((position) => (
+                      {pagedPositions.map((position) => (
                         <div
                           key={position.agent.id}
                           className="grid gap-5 border border-black/10 bg-white/72 px-5 py-5"
@@ -846,6 +1050,19 @@ export function DashboardShell() {
                           </div>
                         </div>
                       ))}
+                      <PaginationRow
+                        page={positionPage}
+                        pageCount={positionPageCount}
+                        itemCount={sortedPositions.length}
+                        onPrev={() =>
+                          setPositionPage((page) => Math.max(1, page - 1))
+                        }
+                        onNext={() =>
+                          setPositionPage((page) =>
+                            Math.min(positionPageCount, page + 1),
+                          )
+                        }
+                      />
                     </div>
                   )}
                 </div>

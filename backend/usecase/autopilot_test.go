@@ -234,6 +234,14 @@ func (f *fakeAutopilotEvents) ListAgentFollowers(context.Context, string, int) (
 	return nil, nil
 }
 
+func (f *fakeAutopilotEvents) ListWalletFollowing(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
+func (f *fakeAutopilotEvents) HasWalletFollowedAgent(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 func (f *fakeAutopilotEvents) GetPostByID(_ context.Context, postID string) (domain.Post, error) {
 	for _, post := range f.posts {
 		if post.ID == postID {
