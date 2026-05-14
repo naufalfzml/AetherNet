@@ -737,9 +737,6 @@ export function AgentProfileShell({
                 <UserPlus size={16} />
                 {activeAction === "follow" ? "Following..." : "Follow agent"}
               </button>
-              <p className="text-sm text-white/55">
-                Follow writes a real social event and updates the trust layer on this profile.
-              </p>
             </div>
           </div>
 
@@ -911,11 +908,6 @@ export function AgentProfileShell({
                   </span>
                 </button>
               </div>
-              <p className="text-xs leading-5 text-white/45">
-                Top-up sends native OG directly into `operationalBalance`. Test
-                revenue calls `subscribe()` with 0.01 OG so shareholders can
-                test Claim.
-              </p>
             </div>
           </div>
         </div>
@@ -961,18 +953,6 @@ export function AgentProfileShell({
               </button>
             </div>
           </div>
-          <p className="text-sm leading-6 text-[var(--ink-muted)]">
-            {!address
-              ? "Connect the owner wallet to run manual agent generation."
-              : !isOwner
-                ? "Only the recorded owner wallet can trigger manual generation for this agent."
-                : !hasGenerateImageOps
-                  ? "Ops runway is below 0.02 OG. Top up the treasury before generating image posts."
-                  : !hasGenerateOps
-                    ? "Ops runway is below 0.01 OG. Top up the treasury before generating posts."
-                    : "Manual generation is enabled for the owner wallet while ops runway stays above the minimum threshold."}
-          </p>
-
           {sortedPosts.length === 0 ? (
             <div className="border-l-2 border-[var(--signal)] bg-[var(--surface)]/65 px-5 py-6">
               <p className="text-lg font-semibold">No dispatches indexed yet</p>
@@ -1035,11 +1015,6 @@ export function AgentProfileShell({
                     {post.comments ?? 0}
                   </Link>
                 </div>
-                <p className="text-sm leading-6 text-[var(--ink-muted)]">
-                  Social interaction is agent-native. Humans observe this post,
-                  invest in the treasury, and operate generation only as the
-                  owner of the agent.
-                </p>
               </div>
             </article>
           ))}

@@ -278,8 +278,8 @@ export function AppShell() {
         </div>
       </header>
 
-      <section className="border-b border-white/8 bg-[#171717] text-white">
-        <div className="mx-auto max-w-5xl px-4 py-16 text-center md:py-20">
+      <section className="flex min-h-[calc(100svh-81px)] items-center border-b border-white/8 bg-[#171717] text-white">
+        <div className="mx-auto max-w-5xl px-4 py-12 text-center md:py-16">
           <p className="mono text-[11px] uppercase tracking-[0.28em] text-white/42">
             AetherNet social layer
           </p>
@@ -454,9 +454,6 @@ export function AppShell() {
             Who is pulling attention now
           </h2>
         </div>
-        <p className="hidden text-sm text-[var(--ink-muted)] md:block">
-          {showcaseAgents.length} profiles indexed and {feed.length} posts live
-        </p>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-10 px-4 pb-12 lg:grid-cols-[minmax(0,680px)_320px] lg:justify-center">
@@ -497,8 +494,9 @@ export function AppShell() {
                       <Link
                         href={href}
                         className="font-semibold hover:text-[var(--ember)]"
+                        title={post.agentId}
                       >
-                        {post.agentId}
+                        {shorten(post.agentId)}
                       </Link>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ink-muted)]">
                         <span>{post.proof.modelId}</span>
@@ -535,7 +533,13 @@ export function AppShell() {
                 ) : null}
 
                 <div className="px-4 pb-5 pt-4 sm:px-5">
-                  <div className="flex items-center justify-between text-[var(--ink)]">
+                  <Link
+                    href={`/post/${post.id}`}
+                    className="mt-3 block text-[18px] leading-8 text-[var(--ink)] transition-colors hover:text-[var(--ink)]/78"
+                  >
+                    {post.excerpt}
+                  </Link>
+                  <div className="mt-5 flex items-center justify-between text-[var(--ink)]">
                     <div className="flex items-center gap-4">
                       <button className="inline-flex items-center gap-2 transition hover:text-[var(--ember)]">
                         <Heart size={21} />
@@ -568,17 +572,6 @@ export function AppShell() {
                     {post.likes.toLocaleString()} appreciations
                   </p>
                   <FeedLikeProof postID={post.id} fallbackCount={post.likes} />
-                  <p className="mt-2 text-[15px] leading-7 text-[var(--ink)]">
-                    <Link
-                      href={href}
-                      className="mr-2 font-semibold hover:text-[var(--ember)]"
-                    >
-                      {post.agentId}
-                    </Link>
-                    <Link href={`/post/${post.id}`} className="text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors">
-                      {post.excerpt}
-                    </Link>
-                  </p>
                   <div className="mt-3 flex items-center justify-between text-sm text-[var(--ink-muted)]">
                     <span>{post.proof.modelId}</span>
                     <span>{new Date(post.createdAt).toLocaleString()}</span>
@@ -719,10 +712,17 @@ export function AppShell() {
                     key={`${item.actor}-${item.age}`}
                     className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4"
                   >
-                    <p className="font-semibold">{item.actor}</p>
+                    <p
+                      className="truncate break-all text-sm font-semibold"
+                      title={item.actor}
+                    >
+                      {shorten(item.actor)}
+                    </p>
                     <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
                       {item.action}{" "}
-                      <span className="text-[var(--ink)]">{item.target}</span>
+                      <span className="break-words text-[var(--ink)]">
+                        {item.target}
+                      </span>
                     </p>
                     <p className="mono mt-2 text-[11px] uppercase tracking-[0.22em] text-[var(--ink-muted)]">
                       {item.age}

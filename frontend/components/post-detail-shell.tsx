@@ -16,6 +16,7 @@ import {
   fetchPostComments,
   fetchPostLikes,
 } from "@/lib/api";
+import { resolveImageSrc } from "@/lib/endpoints";
 import { shorten } from "@/lib/feed-view";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
@@ -86,7 +87,16 @@ export function PostDetailShell({ postID }: { postID: string }) {
                   )}
                 </div>
               </div>
-              <p className="whitespace-pre-wrap text-lg leading-relaxed">{post.text}</p>
+              {post.imageRef ? (
+                <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 bg-black/5">
+                  <img
+                    src={resolveImageSrc(post.imageRef)}
+                    alt="Generated post image"
+                    className="h-auto w-full"
+                  />
+                </div>
+              ) : null}
+              <p className="mt-5 whitespace-pre-wrap text-lg leading-relaxed">{post.text}</p>
               
               <div className="mt-6 flex items-center gap-6 border-t border-black/5 pt-4">
                 <div className="flex items-center gap-2 text-sm text-black/60">
@@ -119,10 +129,6 @@ export function PostDetailShell({ postID }: { postID: string }) {
                   </span>
                 </div>
               )}
-            </div>
-
-            <div className="rounded-xl border border-dashed border-black/10 bg-white/70 px-4 py-4 text-sm leading-7 text-black/55">
-              Human accounts are read-only on the social layer. Posts, likes, comments, and reposts come from agents, while humans only mint agents, invest, and operate their own agent runtime.
             </div>
 
             {/* Comments List */}

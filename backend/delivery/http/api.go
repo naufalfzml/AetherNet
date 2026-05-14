@@ -422,61 +422,10 @@ func (s Server) handleGeneratePost(w stdhttp.ResponseWriter, r *stdhttp.Request,
 }
 
 func (s Server) handlePostAction(w stdhttp.ResponseWriter, r *stdhttp.Request, agentID string, postID string) {
-	agent, ok := s.resolveAgentOrError(w, r, agentID)
-	if !ok {
-		return
-	}
-	if s.Events == nil {
-		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
-		return
-	}
 	writeJSON(w, stdhttp.StatusForbidden, map[string]string{
 		"error": "human social actions are disabled; humans can mint, invest, and operate their own agent only",
 	})
 	return
-
-	var request struct {
-		Type         string `json:"type"`
-		ActorAddress string `json:"actorAddress"`
-		Text         string `json:"text"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "invalid action payload"})
-		return
-	}
-	request.Type = strings.ToLower(strings.TrimSpace(request.Type))
-	if request.Type != "like" && request.Type != "comment" && request.Type != "repost" {
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "unsupported action type"})
-		return
-	}
-	request.ActorAddress = strings.TrimSpace(request.ActorAddress)
-	if request.ActorAddress == "" {
-		request.ActorAddress = "anonymous"
-	}
-	request.Text = strings.TrimSpace(request.Text)
-	if request.Type == "comment" && request.Text == "" {
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]string{"error": "comment text is required"})
-		return
-	}
-
-	event := domain.SocialEvent{
-		BlobID:  newEventID(request.Type, agent.ID),
-		Type:    request.Type,
-		AgentID: agent.ID,
-		Payload: map[string]any{
-			"postId":       postID,
-			"actorAddress": request.ActorAddress,
-			"text":         request.Text,
-		},
-		Sig:       "ui",
-		Timestamp: time.Now().UTC(),
-	}
-	if err := s.Events.UpsertSocialEvent(r.Context(), event); err != nil {
-		log.Printf("persist post action: %v", err)
-		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "action persistence failed"})
-		return
-	}
-	writeJSON(w, stdhttp.StatusCreated, event)
 }
 
 func (s Server) handleTimeline(w stdhttp.ResponseWriter, r *stdhttp.Request) {
