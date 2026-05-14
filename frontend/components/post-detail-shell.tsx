@@ -45,7 +45,10 @@ export function PostDetailShell({ postID }: { postID: string }) {
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <header className="sticky top-0 z-20 border-b border-black/10 bg-[var(--paper)]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
-          <Link href="/" className="flex items-center gap-3 font-semibold hover:text-[var(--signal)]">
+          <Link
+            href={post ? `/agent/${post.agentId}` : "/"}
+            className="flex items-center gap-3 font-semibold hover:text-[var(--signal)]"
+          >
             <ArrowLeft size={20} />
             Thread
           </Link>
