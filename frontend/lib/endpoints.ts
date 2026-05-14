@@ -11,3 +11,11 @@ export function resolveImageSrc(imageRef: string): string {
   }
   return `${backendURL}/storage?pointer=${encodeURIComponent(imageRef)}`;
 }
+
+export function resolveStoragePointerSrc(pointer: string): string {
+  if (!pointer) return "";
+  if (pointer.startsWith("http")) {
+    return pointer;
+  }
+  return `${backendURL}/storage?pointer=${encodeURIComponent(pointer)}`;
+}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
   usePublicClient,
@@ -26,11 +26,13 @@ import {
 import {
   createPostAction,
   createAgentAction,
+  fetchAgentFollowers,
   fetchAgentPosts,
   fetchAgentStats,
   generateAgentPost,
   type Agent,
   type Post,
+  type SocialEvent,
 } from "@/lib/api";
 import { resolveImageSrc } from "@/lib/endpoints";
 import { ProofModal } from "@/components/proof-modal";
@@ -44,6 +46,11 @@ import {
 
 const defaultTopUp = parseEther("0.02");
 const defaultRevenue = parseEther("0.01");
+const topUpPresets = [
+  { label: "0.01 OG", value: parseEther("0.01") },
+  { label: "0.02 OG", value: parseEther("0.02") },
+  { label: "0.05 OG", value: parseEther("0.05") },
+] as const;
 const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
 const sharesBoughtEvent = parseAbiItem(
@@ -52,12 +59,22 @@ const sharesBoughtEvent = parseAbiItem(
 const sharesSoldEvent = parseAbiItem(
   "event SharesSold(address indexed seller, uint256 amount, uint256 received)",
 );
+const dividendsClaimedEvent = parseAbiItem(
+  "event DividendsClaimed(address indexed investor, uint256 amount)",
+);
 
 type InvestorLedgerEntry = {
   address: `0x${string}`;
   shares: bigint;
   paid: bigint;
   received: bigint;
+};
+
+type DividendClaimEntry = {
+  address: `0x${string}`;
+  amount: bigint;
+  transactionHash?: `0x${string}`;
+  timestamp?: bigint;
 };
 
 export function AgentProfileShell({
@@ -68,6 +85,7 @@ export function AgentProfileShell({
   posts: Post[];
 }) {
   const { isConnected, address } = useAccount();
+  const queryClient = useQueryClient();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
@@ -76,6 +94,10 @@ export function AgentProfileShell({
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [ledgerRefresh, setLedgerRefresh] = useState(0);
+  const [claimHistory, setClaimHistory] = useState<DividendClaimEntry[]>([]);
+  const [claimHistoryStatus, setClaimHistoryStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [activePostAction, setActivePostAction] = useState<string | null>(null);
   const [toasts, setToasts] = useState<TxToast[]>([]);
@@ -83,10 +105,15 @@ export function AgentProfileShell({
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
     {},
   );
+  const [topUpAmount, setTopUpAmount] = useState<bigint>(defaultTopUp);
 
   const { data: agentStats, refetch: refetchStats } = useQuery({
     queryKey: ["agentStats", agent.id],
     queryFn: () => fetchAgentStats(agent.id),
+  });
+  const { data: followers = [] } = useQuery({
+    queryKey: ["agentFollowers", agent.id],
+    queryFn: () => fetchAgentFollowers(agent.id),
   });
   const tokenId = BigInt(agent.tokenId || "0");
   const indexedAgentAddress = (agent.agentAddress ||
@@ -167,6 +194,18 @@ export function AgentProfileShell({
     functionName: "curveReserve",
     query: { enabled: hasAgentAddress },
   });
+  const basePrice = useReadContract({
+    address: agentAddress,
+    abi: treasuryAbi,
+    functionName: "basePrice",
+    query: { enabled: hasAgentAddress },
+  });
+  const slope = useReadContract({
+    address: agentAddress,
+    abi: treasuryAbi,
+    functionName: "slope",
+    query: { enabled: hasAgentAddress },
+  });
   const treasuryOwner = useReadContract({
     address: agentAddress,
     abi: treasuryAbi,
@@ -179,6 +218,9 @@ export function AgentProfileShell({
     functionName: "totalSupply",
     query: { enabled: hasAgentAddress },
   });
+  const opsRunway = useMemo(() => getOpsRunwayState(opsBalance.data ?? 0n), [
+    opsBalance.data,
+  ]);
 
   const chainReads = useMemo(
     () => [
@@ -189,6 +231,8 @@ export function AgentProfileShell({
       opsBalance,
       investorPool,
       curveReserve,
+      basePrice,
+      slope,
       treasuryOwner,
       totalSupply,
     ],
@@ -200,6 +244,8 @@ export function AgentProfileShell({
       opsBalance,
       investorPool,
       curveReserve,
+      basePrice,
+      slope,
       treasuryOwner,
       totalSupply,
     ],
@@ -279,6 +325,49 @@ export function AgentProfileShell({
     };
   }, [agentAddress, hasAgentAddress, ledgerRefresh, publicClient]);
 
+  useEffect(() => {
+    if (!publicClient || !hasAgentAddress) {
+      setClaimHistory([]);
+      setClaimHistoryStatus("idle");
+      return;
+    }
+
+    const client = publicClient;
+    let cancelled = false;
+
+    async function loadClaimHistory() {
+      setClaimHistoryStatus("loading");
+      try {
+        const logs = await client.getLogs({
+          address: agentAddress,
+          event: dividendsClaimedEvent,
+          fromBlock: 0n,
+          toBlock: "latest",
+        });
+
+        if (cancelled) return;
+        setClaimHistory(
+          logs
+            .map((log) => ({
+              address: log.args.investor as `0x${string}`,
+              amount: log.args.amount ?? 0n,
+              transactionHash: log.transactionHash,
+              timestamp: log.blockNumber,
+            }))
+            .reverse(),
+        );
+        setClaimHistoryStatus("ready");
+      } catch {
+        if (!cancelled) setClaimHistoryStatus("error");
+      }
+    }
+
+    void loadClaimHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentAddress, hasAgentAddress, ledgerRefresh, publicClient]);
+
   async function buyOneShare() {
     const price = buyPrice.data ?? parseEther("0.001");
     await runTransaction({
@@ -333,17 +422,17 @@ export function AgentProfileShell({
     });
   }
 
-  async function topUpOps() {
+  async function topUpOps(amount = topUpAmount) {
     await runTransaction({
       action: "topup",
       processingTitle: "Topping up operations",
       successTitle: "Operations funded",
       errorTitle: "Top-up failed",
-      startMessage: `Waiting for wallet approval for ${formatEther(defaultTopUp)} OG.`,
+      startMessage: `Waiting for wallet approval for ${formatEther(amount)} OG.`,
       run: () =>
         sendTransactionAsync({
           to: agentAddress,
-          value: defaultTopUp,
+          value: amount,
         }),
     });
   }
@@ -364,6 +453,41 @@ export function AgentProfileShell({
           value: defaultRevenue,
         }),
     });
+  }
+
+  async function followAgent() {
+    const actorAddress = address ?? "anonymous";
+    const toastId = Date.now();
+    setActiveAction("follow");
+    upsertToast({
+      id: toastId,
+      title: "Following agent",
+      message: "Writing a real follow event to AetherNet.",
+      status: "processing",
+    });
+    try {
+      await createAgentAction(profileAgentID, "follow", actorAddress);
+      await Promise.all([
+        refetchStats(),
+        queryClient.invalidateQueries({ queryKey: ["agentFollowers", agent.id] }),
+      ]);
+      upsertToast({
+        id: toastId,
+        title: "Follow recorded",
+        message: "Recent followers are now updated from the social event log.",
+        status: "success",
+      });
+      window.setTimeout(() => dismissToast(toastId), 5_000);
+    } catch (error) {
+      upsertToast({
+        id: toastId,
+        title: "Follow failed",
+        message: getErrorMessage(error),
+        status: "error",
+      });
+    } finally {
+      setActiveAction(null);
+    }
   }
 
   async function runTransaction({
@@ -606,10 +730,12 @@ export function AgentProfileShell({
               </div>
               <div>
                 <p className="mono text-xs uppercase tracking-[0.24em] text-white/45">
-                  Share supply
+                  Followers / following
                 </p>
                 <p className="mt-2 text-3xl font-semibold">
-                  {totalSupply.data ? `${totalSupply.data}` : "0"}
+                  {agentStats
+                    ? `${agentStats.followers} / ${agentStats.following}`
+                    : "0 / 0"}
                 </p>
               </div>
               <div>
@@ -622,9 +748,68 @@ export function AgentProfileShell({
                 </p>
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-6">
+              <button
+                onClick={followAgent}
+                disabled={!isConnected || activeAction !== null}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/12 bg-white/8 px-5 py-2 text-sm font-medium text-white transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <UserPlus size={16} />
+                {activeAction === "follow" ? "Following..." : "Follow agent"}
+              </button>
+              <p className="text-sm text-white/55">
+                Follow writes a real social event and updates the trust layer on this profile.
+              </p>
+            </div>
           </div>
 
           <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur sm:p-6">
+            <div className={`rounded-[1.4rem] border px-4 py-4 ${opsRunway.panelClass}`}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="mono text-[11px] uppercase tracking-[0.22em] text-white/55">
+                    Ops runway
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <p className="text-2xl font-semibold">
+                      {opsBalance.data ? `${formatEther(opsBalance.data)} OG` : "0 OG"}
+                    </p>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${opsRunway.badgeClass}`}>
+                      {opsRunway.label}
+                    </span>
+                  </div>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-white/72">
+                    {opsRunway.message}
+                  </p>
+                </div>
+                <button
+                  onClick={() => topUpOps()}
+                  disabled={!isConnected || !hasAgentAddress || activeAction !== null}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-white px-5 py-2 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span>{activeAction === "topup" ? "Funding..." : "Top up ops"}</span>
+                  <span className="mono text-xs text-[var(--ink-muted)]">
+                    {formatEther(topUpAmount)} OG
+                  </span>
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {topUpPresets.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => setTopUpAmount(preset.value)}
+                    className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+                      topUpAmount === preset.value
+                        ? "bg-white text-[var(--ink)]"
+                        : "border border-white/14 bg-white/6 text-white/68 hover:bg-white/10"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Metric
                 label="My shares"
@@ -718,7 +903,7 @@ export function AgentProfileShell({
                   </span>
                 </button>
                 <button
-                  onClick={topUpOps}
+                  onClick={() => topUpOps()}
                   disabled={
                     !isConnected || !hasAgentAddress || activeAction !== null
                   }
@@ -728,7 +913,7 @@ export function AgentProfileShell({
                     {activeAction === "topup" ? "Funding..." : "Top up ops"}
                   </span>
                   <span className="mono text-xs text-[var(--signal)]/75">
-                    {formatEther(defaultTopUp)} OG
+                    {formatEther(topUpAmount)} OG
                   </span>
                 </button>
                 <button
@@ -747,8 +932,9 @@ export function AgentProfileShell({
                 </button>
               </div>
               <p className="text-xs leading-5 text-white/45">
-                Test revenue calls `subscribe()` with 0.01 OG so shareholders
-                can test Claim.
+                Top-up sends native OG directly into `operationalBalance`. Test
+                revenue calls `subscribe()` with 0.01 OG so shareholders can
+                test Claim.
               </p>
             </div>
           </div>
@@ -829,7 +1015,13 @@ export function AgentProfileShell({
                     </div>
                   ) : null}
                 </div>
-                <ProofModal proof={post.proof} />
+                <ProofModal
+                  proof={post.proof}
+                  storageEvidence={[
+                    { label: "Inference record", pointer: post.memoryPointer },
+                    { label: "Attached media", pointer: post.imageRef },
+                  ]}
+                />
               </div>
               <div className="mt-5 grid gap-3 border-t border-[var(--ink)]/10 pt-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -883,6 +1075,47 @@ export function AgentProfileShell({
         </div>
 
         <aside className="min-w-0 space-y-4">
+          <div className="rounded-[1.75rem] bg-white p-5">
+            <div className="flex items-center gap-2">
+              <UserPlus size={18} />
+              <h3 className="text-xl font-semibold">Recent followers</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+              Pulled from persisted follow events. This is the visible trust layer for the agent.
+            </p>
+            <div className="mt-5 space-y-4">
+              {followers.length === 0 ? (
+                <p className="text-sm leading-6 text-[var(--ink-muted)]">
+                  No followers recorded yet. The first follow will appear here immediately.
+                </p>
+              ) : (
+                followers.slice(0, 8).map((event) => (
+                  <FollowerRow key={event.id} event={event} />
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] bg-[var(--surface)] p-5">
+            <div className="flex items-center gap-2">
+              <Activity size={18} />
+              <h3 className="text-xl font-semibold">Bonding curve</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+              Live treasury pricing from the contract. The highlighted marker
+              shows the current supply so the next step up in price is visible.
+            </p>
+            <div className="mt-5">
+              <BondingCurveChart
+                totalSupply={totalSupply.data ?? 0n}
+                basePrice={basePrice.data ?? 0n}
+                slope={slope.data ?? 0n}
+                buyPrice={buyPrice.data ?? 0n}
+                sellPrice={sellPrice.data ?? 0n}
+              />
+            </div>
+          </div>
+
           <div className="rounded-[1.75rem] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-2">
               <Users2 size={18} />
@@ -943,6 +1176,59 @@ export function AgentProfileShell({
             </div>
           </div>
 
+          <div className="rounded-[1.75rem] bg-white p-5">
+            <div className="flex items-center gap-2">
+              <BadgeDollarSign size={18} />
+              <h3 className="text-xl font-semibold">Dividend withdrawal history</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+              Recent `DividendsClaimed` events from the treasury. This makes profit extraction visible to jurors and investors.
+            </p>
+            <div className="mt-5 space-y-4">
+              {claimHistoryStatus === "loading" ? (
+                <p className="text-sm text-[var(--ink-muted)]">
+                  Loading dividend withdrawals...
+                </p>
+              ) : null}
+              {claimHistoryStatus === "error" ? (
+                <p className="text-sm text-[var(--ink-muted)]">
+                  Dividend claim events are unavailable from the current RPC.
+                </p>
+              ) : null}
+              {claimHistoryStatus === "ready" && claimHistory.length === 0 ? (
+                <p className="text-sm leading-6 text-[var(--ink-muted)]">
+                  No dividends have been claimed yet. Once an investor presses Claim, the withdrawal will appear here.
+                </p>
+              ) : null}
+              {claimHistory.slice(0, 8).map((entry) => (
+                <div
+                  key={`${entry.address}-${entry.transactionHash ?? entry.timestamp?.toString() ?? "claim"}`}
+                  className="border-b border-[var(--ink)]/10 pb-4 last:border-b-0 last:pb-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold">{shorten(entry.address)}</p>
+                      <p className="mono break-all text-xs uppercase tracking-[0.12em] text-[var(--ink-muted)]">
+                        {entry.address}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold">{formatCompactOG(entry.amount)}</p>
+                      <p className="text-xs text-[var(--ink-muted)]">
+                        block {entry.timestamp?.toString() ?? "pending"}
+                      </p>
+                    </div>
+                  </div>
+                  {entry.transactionHash ? (
+                    <p className="mono mt-2 break-all text-xs text-[var(--ink-muted)]">
+                      tx {shorten(entry.transactionHash)}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[1.75rem] bg-[var(--ink)] p-5 text-[var(--paper)]">
             <div className="flex items-center gap-2">
               <Orbit size={18} />
@@ -990,6 +1276,30 @@ export function AgentProfileShell({
   );
 }
 
+function FollowerRow({ event }: { event: SocialEvent }) {
+  const actorAddress =
+    typeof event.payload.actorAddress === "string" &&
+    event.payload.actorAddress.trim() !== ""
+      ? event.payload.actorAddress
+      : event.agentId;
+
+  return (
+    <div className="border-b border-[var(--ink)]/10 pb-4 last:border-b-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold">{shorten(actorAddress)}</p>
+          <p className="mono break-all text-xs uppercase tracking-[0.12em] text-[var(--ink-muted)]">
+            {actorAddress}
+          </p>
+        </div>
+        <p className="shrink-0 text-xs text-[var(--ink-muted)]">
+          {formatDate(event.timestamp)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[1.4rem] border border-white/8 bg-white/[0.03] p-4">
@@ -997,6 +1307,168 @@ function Metric({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-2 text-2xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function BondingCurveChart({
+  totalSupply,
+  basePrice,
+  slope,
+  buyPrice,
+  sellPrice,
+}: {
+  totalSupply: bigint;
+  basePrice: bigint;
+  slope: bigint;
+  buyPrice: bigint;
+  sellPrice: bigint;
+}) {
+  const points = useMemo(() => {
+    const currentSupply = Number(totalSupply);
+    const start = Math.max(0, currentSupply - 3);
+    const end = Math.max(start + 7, currentSupply + 8);
+    const series: Array<{ supply: number; price: bigint }> = [];
+
+    for (let supply = start; supply <= end; supply += 1) {
+      series.push({
+        supply,
+        price: basePrice + slope * BigInt(supply),
+      });
+    }
+
+    return series;
+  }, [basePrice, slope, totalSupply]);
+
+  const chartWidth = 320;
+  const chartHeight = 176;
+  const paddingX = 18;
+  const paddingTop = 14;
+  const paddingBottom = 26;
+  const usableWidth = chartWidth - paddingX * 2;
+  const usableHeight = chartHeight - paddingTop - paddingBottom;
+  const maxPrice = points.reduce(
+    (current, point) => (point.price > current ? point.price : current),
+    1n,
+  );
+  const step = points.length > 1 ? usableWidth / (points.length - 1) : usableWidth;
+  const currentSupplyNumber = Number(totalSupply);
+
+  const coordinates = points.map((point, index) => {
+    const x = paddingX + step * index;
+    const ratio = Number(point.price) / Number(maxPrice || 1n);
+    const y = paddingTop + usableHeight - ratio * usableHeight;
+    return { ...point, x, y };
+  });
+
+  const path = coordinates
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
+  const areaPath = `${path} L ${coordinates[coordinates.length - 1]?.x ?? paddingX} ${chartHeight - paddingBottom} L ${coordinates[0]?.x ?? paddingX} ${chartHeight - paddingBottom} Z`;
+  const currentPoint =
+    coordinates.find((point) => point.supply === currentSupplyNumber) ??
+    coordinates[coordinates.length - 1];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <MiniMetric label="Spot buy" value={formatCompactOG(buyPrice)} />
+        <MiniMetric label="Spot sell" value={formatCompactOG(sellPrice)} />
+        <MiniMetric label="Base price" value={formatCompactOG(basePrice)} />
+        <MiniMetric label="Slope / share" value={formatCompactOG(slope)} />
+      </div>
+
+      <div className="overflow-hidden rounded-[1.5rem] border border-[var(--ink)]/10 bg-white p-4">
+        <svg
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          className="h-auto w-full"
+          role="img"
+          aria-label="Bonding curve chart"
+        >
+          <defs>
+            <linearGradient id="curve-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--signal)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="var(--signal)" stopOpacity="0.03" />
+            </linearGradient>
+          </defs>
+          <line
+            x1={paddingX}
+            y1={chartHeight - paddingBottom}
+            x2={chartWidth - paddingX}
+            y2={chartHeight - paddingBottom}
+            stroke="rgba(20,20,20,0.14)"
+            strokeWidth="1"
+          />
+          <path d={areaPath} fill="url(#curve-fill)" />
+          <path
+            d={path}
+            fill="none"
+            stroke="var(--signal)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          {coordinates.map((point) => (
+            <circle
+              key={point.supply}
+              cx={point.x}
+              cy={point.y}
+              r={point.supply === currentPoint?.supply ? 4.5 : 2.5}
+              fill={point.supply === currentPoint?.supply ? "var(--ember)" : "var(--signal)"}
+            />
+          ))}
+          {currentPoint ? (
+            <>
+              <line
+                x1={currentPoint.x}
+                y1={paddingTop}
+                x2={currentPoint.x}
+                y2={chartHeight - paddingBottom}
+                stroke="rgba(246,87,64,0.35)"
+                strokeDasharray="4 4"
+              />
+              <text
+                x={currentPoint.x}
+                y={paddingTop + 4}
+                textAnchor="middle"
+                className="fill-[var(--ember)] text-[10px] font-semibold uppercase tracking-[0.18em]"
+              >
+                now
+              </text>
+            </>
+          ) : null}
+          <text
+            x={paddingX}
+            y={chartHeight - 8}
+            className="fill-[var(--ink-muted)] text-[10px] uppercase tracking-[0.18em]"
+          >
+            supply {points[0]?.supply ?? 0}
+          </text>
+          <text
+            x={chartWidth - paddingX}
+            y={chartHeight - 8}
+            textAnchor="end"
+            className="fill-[var(--ink-muted)] text-[10px] uppercase tracking-[0.18em]"
+          >
+            supply {points[points.length - 1]?.supply ?? 0}
+          </text>
+        </svg>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[var(--ink-muted)]">
+          <span>Current supply: {totalSupply.toString()} shares</span>
+          <span>Next share: {formatCompactOG(buyPrice)}</span>
+          <span>Exit quote: {formatCompactOG(sellPrice)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.2rem] border border-[var(--ink)]/10 bg-white px-4 py-3">
+      <p className="mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-muted)]">
+        {label}
+      </p>
+      <p className="mt-2 text-lg font-semibold text-[var(--ink)]">{value}</p>
     </div>
   );
 }
@@ -1015,4 +1487,40 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatCompactOG(value: bigint) {
+  const amount = Number(formatEther(value));
+  if (!Number.isFinite(amount)) return "0 OG";
+  if (amount >= 1) return `${amount.toFixed(3)} OG`;
+  if (amount >= 0.01) return `${amount.toFixed(4)} OG`;
+  return `${amount.toFixed(5)} OG`;
+}
+
+function getOpsRunwayState(balance: bigint) {
+  if (balance < parseEther("0.01")) {
+    return {
+      label: "critical",
+      message:
+        "The treasury is close to empty. Without fresh ops funding, the agent can stall on compute, storage, and publishing.",
+      panelClass: "border-[var(--ember)]/35 bg-[rgba(246,87,64,0.12)]",
+      badgeClass: "bg-[var(--ember)] text-white",
+    };
+  }
+  if (balance < parseEther("0.05")) {
+    return {
+      label: "low fuel",
+      message:
+        "The agent can still operate, but runway is shallow. A quick top-up keeps posting and proof generation from going brittle during demo.",
+      panelClass: "border-white/12 bg-white/[0.05]",
+      badgeClass: "bg-white text-[var(--ink)]",
+    };
+  }
+  return {
+    label: "healthy",
+    message:
+      "Operational balance is healthy. The agent has enough native OG to keep running compute, storage, and social actions.",
+    panelClass: "border-[var(--signal)]/30 bg-[rgba(63,211,198,0.12)]",
+    badgeClass: "bg-[var(--signal)] text-[var(--ink)]",
+  };
 }

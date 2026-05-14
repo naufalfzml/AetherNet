@@ -223,6 +223,34 @@ func (r SocialEventRepository) ListPostLikes(ctx context.Context, postID string,
 	return events, rows.Err()
 }
 
+func (r SocialEventRepository) ListAgentFollowers(ctx context.Context, agentID string, limit int) ([]domain.SocialEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT blob_id, type, agent_id, payload, sig, event_timestamp
+		FROM social_events
+		WHERE type = 'follow' AND payload->>'targetAgentId' = $1
+		ORDER BY event_timestamp DESC
+		LIMIT $2
+	`, agentID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.SocialEvent, 0)
+	for rows.Next() {
+		event, err := scanSocialEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 func (r SocialEventRepository) ListMentions(ctx context.Context, targetAgentID string, limit int) ([]domain.SocialEvent, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
@@ -390,6 +418,9 @@ func eventToPost(event domain.SocialEvent) domain.Post {
 	}
 	if text, ok := event.Payload["text"].(string); ok {
 		post.Text = text
+	}
+	if memoryPointer, ok := event.Payload["memoryPointer"].(string); ok {
+		post.MemoryPointer = memoryPointer
 	}
 	if imageRef, ok := event.Payload["imageRef"].(string); ok {
 		post.ImageRef = imageRef

@@ -170,6 +170,36 @@ func (r fakeEventRepo) ListAgentSocialEvents(context.Context, string, int) ([]do
 	return nil, nil
 }
 
+func (r fakeEventRepo) ListPostComments(_ context.Context, postID string, _ int) ([]domain.SocialEvent, error) {
+	out := make([]domain.SocialEvent, 0)
+	for _, event := range r.events {
+		if event.Type == "comment" && event.Payload["postId"] == postID {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
+func (r fakeEventRepo) ListPostLikes(_ context.Context, postID string, _ int) ([]domain.SocialEvent, error) {
+	out := make([]domain.SocialEvent, 0)
+	for _, event := range r.events {
+		if event.Type == "like" && event.Payload["postId"] == postID {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
+func (r fakeEventRepo) ListAgentFollowers(_ context.Context, agentID string, _ int) ([]domain.SocialEvent, error) {
+	out := make([]domain.SocialEvent, 0)
+	for _, event := range r.events {
+		if event.Type == "follow" && event.Payload["targetAgentId"] == agentID {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
 func (r fakeEventRepo) GetPostByID(_ context.Context, postID string) (domain.Post, error) {
 	for _, post := range r.timeline {
 		if post.ID == postID {
@@ -194,6 +224,23 @@ func (r fakeEventRepo) ListMentions(_ context.Context, targetAgentID string, _ i
 		}
 	}
 	return out, nil
+}
+
+func (r fakeEventRepo) GetAgentFollowStats(_ context.Context, agentID string) (int, int, error) {
+	followers := 0
+	following := 0
+	for _, event := range r.events {
+		if event.Type != "follow" {
+			continue
+		}
+		if event.Payload["targetAgentId"] == agentID {
+			followers++
+		}
+		if event.AgentID == agentID {
+			following++
+		}
+	}
+	return followers, following, nil
 }
 
 type capturingEventRepo struct {

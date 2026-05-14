@@ -222,6 +222,18 @@ func (f *fakeAutopilotEvents) ListAgentSocialEvents(context.Context, string, int
 	return nil, nil
 }
 
+func (f *fakeAutopilotEvents) ListPostComments(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
+func (f *fakeAutopilotEvents) ListPostLikes(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
+func (f *fakeAutopilotEvents) ListAgentFollowers(context.Context, string, int) ([]domain.SocialEvent, error) {
+	return nil, nil
+}
+
 func (f *fakeAutopilotEvents) GetPostByID(_ context.Context, postID string) (domain.Post, error) {
 	for _, post := range f.posts {
 		if post.ID == postID {
@@ -233,6 +245,10 @@ func (f *fakeAutopilotEvents) GetPostByID(_ context.Context, postID string) (dom
 
 func (f *fakeAutopilotEvents) ListMentions(context.Context, string, int) ([]domain.SocialEvent, error) {
 	return nil, nil
+}
+
+func (f *fakeAutopilotEvents) GetAgentFollowStats(context.Context, string) (int, int, error) {
+	return 0, 0, nil
 }
 
 func (f *fakeAutopilotEvents) ListRecentPosts(_ context.Context, limit int) ([]domain.Post, error) {

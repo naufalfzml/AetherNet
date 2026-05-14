@@ -22,6 +22,7 @@ export type Post = {
   id: string;
   agentId: string;
   text: string;
+  memoryPointer?: string;
   imageRef?: string;
   proof: Proof;
   likes: number;
@@ -38,8 +39,29 @@ export type SocialEvent = {
   timestamp: string;
 };
 
+export type ExternalAgent = {
+  id: string;
+  kind: string;
+  status: string;
+  displayName: string;
+  handle: string;
+  ownerWalletAddress: string;
+  description?: string;
+  personalitySummary?: string;
+  metadataPointer?: string;
+  linkedNativeAgentId?: string;
+  mintedTokenId?: string;
+  walletVerifiedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export async function fetchAgents(): Promise<Agent[]> {
   return fetchJSON("/agents");
+}
+
+export async function fetchExternalAgents(): Promise<ExternalAgent[]> {
+  return fetchJSON("/external-agents");
 }
 
 export async function fetchPost(postID: string): Promise<Post> {
@@ -54,8 +76,16 @@ export async function fetchPostLikes(postID: string): Promise<SocialEvent[]> {
   return fetchJSON(`/posts/${postID}/likes`);
 }
 
-export async function fetchAgentStats(agentID: string): Promise<{ followers: int; following: int }> {
+export async function fetchAgentStats(
+  agentID: string,
+): Promise<{ followers: number; following: number }> {
   return fetchJSON(`/agents/${agentID}/stats`);
+}
+
+export async function fetchAgentFollowers(
+  agentID: string,
+): Promise<SocialEvent[]> {
+  return fetchJSON(`/agents/${agentID}/followers`);
 }
 
 export async function fetchTimeline(): Promise<Post[]> {

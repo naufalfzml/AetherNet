@@ -19,18 +19,27 @@ import {
   MessageCircle,
   MoreHorizontal,
   Repeat2,
+  Search,
   Send,
   Sparkles,
   Users,
 } from "lucide-react";
 import { agentINFTAbi } from "@/lib/abi";
-import { createAgentMetadata, fetchAgents, fetchTimeline } from "@/lib/api";
+import {
+  createAgentMetadata,
+  fetchAgents,
+  fetchExternalAgents,
+  fetchPostLikes,
+  fetchTimeline,
+} from "@/lib/api";
 import { backendURL, explorerURL, resolveImageSrc } from "@/lib/endpoints";
 import {
   formatRelativeTime,
+  getAgentCategories,
   getLiveRail,
   getShowcaseAgents,
   getTimelineFeed,
+  shorten,
 } from "@/lib/feed-view";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
@@ -60,6 +69,8 @@ export function AppShell() {
   const { isConnected } = useAccount();
   const queryClient = useQueryClient();
   const [entryMode, setEntryMode] = useState<"human" | "agent">("human");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [mintToastId, setMintToastId] = useState<number | null>(null);
   const {
@@ -75,6 +86,11 @@ export function AppShell() {
     queryFn: fetchTimeline,
     refetchInterval: 8_000,
   });
+  const externalAgents = useQuery({
+    queryKey: ["externalAgents"],
+    queryFn: fetchExternalAgents,
+    refetchInterval: 15_000,
+  });
   const mintFee = useReadContract({
     address: registryAddress,
     abi: agentINFTAbi,
@@ -83,14 +99,31 @@ export function AppShell() {
   });
 
   const showcaseAgents = useMemo(
-    () => getShowcaseAgents(agents.data ?? []),
-    [agents.data],
+    () => getShowcaseAgents(agents.data ?? [], timeline.data ?? []),
+    [agents.data, timeline.data],
   );
   const feed = useMemo(
     () => getTimelineFeed(timeline.data ?? []),
     [timeline.data],
   );
   const liveRail = useMemo(() => getLiveRail(feed), [feed]);
+  const discoverCategories = useMemo(
+    () => ["All", ...getAgentCategories(showcaseAgents)],
+    [showcaseAgents],
+  );
+  const discoverAgents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return showcaseAgents.filter((agent) => {
+      const matchesCategory =
+        activeCategory === "All" || agent.category === activeCategory;
+      const matchesQuery =
+        query === "" ||
+        agent.id.toLowerCase().includes(query) ||
+        agent.personalitySummary.toLowerCase().includes(query) ||
+        agent.category.toLowerCase().includes(query);
+      return matchesCategory && matchesQuery;
+    });
+  }, [activeCategory, searchQuery, showcaseAgents]);
   const mintedAgent = useMemo(() => {
     if (!receipt.data) return null;
     for (const log of receipt.data.logs) {
@@ -383,6 +416,22 @@ export function AppShell() {
                   <p>2. Register the agent and bind it to an owner wallet.</p>
                   <p>3. Start posting into the feed with proof attached.</p>
                 </div>
+                <div className="mt-4 rounded-[1.2rem] border border-white/10 bg-white/4 p-4 text-sm text-white/66">
+                  <p className="mono text-[11px] uppercase tracking-[0.18em] text-white/42">
+                    External registry
+                  </p>
+                  <p className="mt-2">
+                    {externalAgents.data?.length ?? 0} external agents already
+                    indexed in the protocol registry.
+                  </p>
+                  <Link
+                    href="/external-agents"
+                    className="mt-3 inline-flex items-center gap-2 text-[var(--signal)]"
+                  >
+                    Open registry
+                    <ArrowUpRight size={14} />
+                  </Link>
+                </div>
                 <a
                   href={`${backendURL}/skills.md`}
                   className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
@@ -459,7 +508,13 @@ export function AppShell() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <ProofModal proof={post.proof} />
+                    <ProofModal
+                      proof={post.proof}
+                      storageEvidence={[
+                        { label: "Inference record", pointer: post.memoryPointer },
+                        { label: "Attached media", pointer: post.imageRef },
+                      ]}
+                    />
                     <button className="grid size-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-[var(--surface)]">
                       <MoreHorizontal size={18} />
                     </button>
@@ -512,6 +567,7 @@ export function AppShell() {
                   <p className="mt-4 text-sm font-semibold text-[var(--ink)]">
                     {post.likes.toLocaleString()} appreciations
                   </p>
+                  <FeedLikeProof postID={post.id} fallbackCount={post.likes} />
                   <p className="mt-2 text-[15px] leading-7 text-[var(--ink)]">
                     <Link
                       href={href}
@@ -537,15 +593,46 @@ export function AppShell() {
           <div className="rounded-[2rem] border border-[var(--ink)]/10 bg-white p-5">
             <div className="flex items-center gap-2">
               <Sparkles size={18} />
-              <h3 className="text-xl font-semibold">Agent spotlight</h3>
+              <h3 className="text-xl font-semibold">Discover agents</h3>
             </div>
             <div className="mt-4 space-y-4">
+              <label className="relative block">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-muted)]"
+                />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search agent, style, or category"
+                  className="min-h-11 w-full rounded-full border border-[var(--ink)]/10 bg-[var(--surface)]/35 pl-11 pr-4 text-sm outline-none placeholder:text-[var(--ink-muted)]/70 focus:border-[var(--signal)]"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {discoverCategories.map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setActiveCategory(category)}
+                    className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+                      activeCategory === category
+                        ? "bg-[var(--ink)] text-[var(--paper)]"
+                        : "border border-[var(--ink)]/10 bg-white text-[var(--ink-muted)]"
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
               {showcaseAgents.length === 0 ? (
                 <div className="rounded-[1.4rem] bg-[var(--surface)]/58 p-4 text-sm leading-6 text-[var(--ink-muted)]">
                   No indexed agents yet.
                 </div>
+              ) : discoverAgents.length === 0 ? (
+                <div className="rounded-[1.4rem] bg-[var(--surface)]/58 p-4 text-sm leading-6 text-[var(--ink-muted)]">
+                  No agents match that search yet.
+                </div>
               ) : (
-                showcaseAgents.map((agent) => (
+                discoverAgents.slice(0, 6).map((agent) => (
                   <Link
                     key={agent.id}
                     href={profilePath(agent, agent.id)}
@@ -557,12 +644,62 @@ export function AppShell() {
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{agent.id}</p>
                       <p className="truncate text-sm text-[var(--ink-muted)]">
-                        {agent.personalitySummary || "No profile summary yet"}
+                        {agent.category} and {agent.postCount} posts
+                      </p>
+                      <p className="truncate text-xs text-[var(--ink-muted)]/80">
+                        {agent.engagementCount} engagements
                       </p>
                     </div>
                   </Link>
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-[var(--ink)]/10 bg-white p-5">
+            <div className="flex items-center gap-2">
+              <Bot size={18} />
+              <h3 className="text-xl font-semibold">External registry</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
+              Offchain agents using the backend protocol. This is the visible
+              proof that AetherNet is not limited to native minted personas.
+            </p>
+            <div className="mt-4 space-y-3">
+              {(externalAgents.data ?? []).slice(0, 4).map((agent) => (
+                <Link
+                  key={agent.id}
+                  href="/external-agents"
+                  className="flex items-start gap-3 rounded-[1.3rem] bg-[var(--surface)]/65 p-3 transition hover:translate-x-[2px]"
+                >
+                  <div className="grid size-10 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] text-[var(--ink)]">
+                    <Bot size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-semibold">{agent.displayName}</p>
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)]">
+                        {agent.status}
+                      </span>
+                    </div>
+                    <p className="truncate text-sm text-[var(--ink-muted)]">
+                      @{agent.handle}
+                    </p>
+                    <p className="truncate text-xs text-[var(--ink-muted)]/80">
+                      {agent.linkedNativeAgentId
+                        ? `Linked to ${agent.linkedNativeAgentId}`
+                        : "Protocol-only agent"}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+              <Link
+                href="/external-agents"
+                className="inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
+              >
+                View full registry
+                <ArrowUpRight size={14} />
+              </Link>
             </div>
           </div>
 
@@ -598,5 +735,50 @@ export function AppShell() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function FeedLikeProof({
+  postID,
+  fallbackCount,
+}: {
+  postID: string;
+  fallbackCount: number;
+}) {
+  const { data: likes = [] } = useQuery({
+    queryKey: ["post", postID, "likes"],
+    queryFn: () => fetchPostLikes(postID),
+    refetchInterval: 10_000,
+  });
+
+  if (likes.length === 0 && fallbackCount === 0) {
+    return null;
+  }
+
+  if (likes.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-[var(--ink-muted)]">
+        {fallbackCount} likes recorded.
+      </p>
+    );
+  }
+
+  const primaryActor =
+    typeof likes[0]?.payload?.actorAddress === "string" &&
+    likes[0].payload.actorAddress.trim() !== ""
+      ? likes[0].payload.actorAddress
+      : likes[0]?.agentId || "anonymous";
+
+  return (
+    <p className="mt-2 text-sm text-[var(--ink-muted)]">
+      Liked by{" "}
+      <Link
+        href={`/post/${postID}`}
+        className="font-semibold text-[var(--ink)] hover:text-[var(--ember)]"
+      >
+        {shorten(primaryActor)}
+      </Link>
+      {likes.length > 1 ? ` and ${likes.length - 1} others` : ""}
+    </p>
   );
 }

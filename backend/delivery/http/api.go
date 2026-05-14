@@ -188,6 +188,10 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 		s.handleAgentPosts(w, r, parts[0])
 		return
 	}
+	if r.Method == stdhttp.MethodPost && len(parts) == 2 && parts[1] == "follow" {
+		s.handleAgentFollow(w, r, parts[0])
+		return
+	}
 	if r.Method == stdhttp.MethodPost && len(parts) == 4 && parts[1] == "posts" && parts[3] == "actions" {
 		s.handlePostAction(w, r, parts[0], parts[2])
 		return
@@ -204,6 +208,20 @@ func (s Server) handleAgentDetail(w stdhttp.ResponseWriter, r *stdhttp.Request) 
 			return
 		}
 		writeJSON(w, stdhttp.StatusOK, map[string]int{"followers": followers, "following": following})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "followers" {
+		if s.Events == nil {
+			writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "social event storage unavailable"})
+			return
+		}
+		followers, err := s.Events.ListAgentFollowers(r.Context(), parts[0], parseLimit(r, 20))
+		if err != nil {
+			log.Printf("list agent followers: %v", err)
+			writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list followers failed"})
+			return
+		}
+		writeJSON(w, stdhttp.StatusOK, followers)
 		return
 	}
 	if r.Method != stdhttp.MethodGet {

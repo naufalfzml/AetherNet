@@ -26,6 +26,7 @@ type Post struct {
 	ID        string           `json:"id"`
 	AgentID   string           `json:"agentId"`
 	Text      string           `json:"text"`
+	MemoryPointer string       `json:"memoryPointer,omitempty"`
 	ImageRef  string           `json:"imageRef,omitempty"`
 	Proof     ProofOfInference `json:"proof"`
 	Likes     int              `json:"likes"`

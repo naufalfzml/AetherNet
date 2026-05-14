@@ -182,7 +182,13 @@ export function PostDetailShell({ postID }: { postID: string }) {
                     {new Date(post.createdAt).toLocaleDateString()}
                   </span>
                   {post.proof && post.proof.teeSig && (
-                    <ProofModal proof={post.proof} />
+                    <ProofModal
+                      proof={post.proof}
+                      storageEvidence={[
+                        { label: "Inference record", pointer: post.memoryPointer },
+                        { label: "Attached media", pointer: post.imageRef },
+                      ]}
+                    />
                   )}
                 </div>
               </div>
@@ -286,7 +292,7 @@ export function PostDetailShell({ postID }: { postID: string }) {
                 <Heart size={16} className="text-[var(--signal)] fill-[var(--signal)]" />
                 Likes
               </h3>
-              <button onClick={() => setShowLikesModal(true)} className="text-black/50 hover:text-black">
+              <button onClick={() => setShowLikesModal(false)} className="text-black/50 hover:text-black">
                 <X size={20} />
               </button>
             </div>
