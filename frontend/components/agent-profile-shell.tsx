@@ -53,6 +53,7 @@ const topUpPresets = [
   { label: "0.02 OG", value: parseEther("0.02") },
   { label: "0.05 OG", value: parseEther("0.05") },
 ] as const;
+const indexerGraceDelayMs = 4_000;
 const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
 const sharesBoughtEvent = parseAbiItem(
@@ -78,6 +79,12 @@ type DividendClaimEntry = {
   transactionHash?: `0x${string}`;
   timestamp?: bigint;
 };
+
+function isLikelyReceiptTimeout(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") || message.includes("timed out");
+}
 
 export function AgentProfileShell({
   agent,
@@ -556,15 +563,36 @@ export function AgentProfileShell({
         hash,
       });
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") {
-        throw new Error("Transaction reverted on-chain.");
+      let receiptTimedOut = false;
+      try {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error("Transaction reverted on-chain.");
+        }
+      } catch (error) {
+        if (!isLikelyReceiptTimeout(error)) {
+          throw error;
+        }
+        receiptTimedOut = true;
+        upsertToast({
+          id: toastId,
+          title: processingTitle,
+          message: "Transaction broadcasted. Waiting for indexer...",
+          status: "processing",
+          hash,
+        });
       }
+
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, indexerGraceDelayMs),
+      );
 
       upsertToast({
         id: toastId,
         title: successTitle,
-        message: "Confirmed on-chain.",
+        message: receiptTimedOut
+          ? "Transaction broadcasted. Refreshed after indexer delay."
+          : "Confirmed on-chain.",
         status: "success",
         hash,
       });

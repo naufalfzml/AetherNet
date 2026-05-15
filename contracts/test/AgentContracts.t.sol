@@ -6,6 +6,8 @@ import {AgentINFT} from "../src/AgentINFT.sol";
 import {AgentTreasury} from "../src/AgentTreasury.sol";
 import {AgentTreasuryFactory} from "../src/AgentTreasuryFactory.sol";
 
+/// @title AetherNet Smart Contract Test Suite
+/// @notice Covers minting, treasury deployment, revenue distribution, and runtime authorization behavior.
 contract AgentContractsTest is Test {
     AgentTreasuryFactory internal factory;
     AgentINFT internal inft;
@@ -22,6 +24,7 @@ contract AgentContractsTest is Test {
     uint256 internal constant BASE_PRICE = 0.001 ether;
     uint256 internal constant SLOPE = 0.0001 ether;
 
+    /// @notice Deploys the registry and treasury factory and funds test actors.
     function setUp() public {
         factory = new AgentTreasuryFactory(platform, BASE_PRICE, SLOPE);
         inft = new AgentINFT(MINT_FEE, orchestrator, factory);
@@ -32,6 +35,7 @@ contract AgentContractsTest is Test {
         vm.deal(brand, 10 ether);
     }
 
+    /// @notice Verifies minting deploys a treasury and stores the expected metadata.
     function testMintDeploysTreasuryAndStoresMetadata() public {
         vm.prank(architect);
         (uint256 tokenId, address treasury) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
@@ -44,12 +48,14 @@ contract AgentContractsTest is Test {
         assertEq(AgentTreasury(payable(treasury)).owner(), architect);
     }
 
+    /// @notice Verifies minting reverts when the caller underpays the mint fee.
     function testMintRejectsInsufficientFee() public {
         vm.prank(architect);
         vm.expectRevert(AgentINFT.InsufficientMintFee.selector);
         inft.mintAgent{value: MINT_FEE - 1}("zg://agent-1", keccak256("prompt"));
     }
 
+    /// @notice Verifies metadata updates and proof submission are restricted to authorized actors.
     function testMetadataAndProofAuthorization() public {
         vm.prank(architect);
         (uint256 tokenId,) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
@@ -72,6 +78,7 @@ contract AgentContractsTest is Test {
         assertEq(inft.latestProof(tokenId), keccak256(proof));
     }
 
+    /// @notice Verifies registry orchestrator rotation propagates into existing treasuries.
     function testSetOrchestratorSyncsTreasuries() public {
         vm.prank(architect);
         (, address treasury) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
@@ -81,6 +88,7 @@ contract AgentContractsTest is Test {
         assertEq(AgentTreasury(payable(treasury)).orchestrator(), nextOrchestrator);
     }
 
+    /// @notice Verifies bonding-curve pricing, slippage checks, and reserve accounting.
     function testBondingCurveBuySellAndSlippage() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -103,6 +111,7 @@ contract AgentContractsTest is Test {
         assertEq(treasury.curveReserve(), 0.001 ether);
     }
 
+    /// @notice Verifies shares cannot be transferred between wallets directly.
     function testSharesAreNonTransferable() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -115,6 +124,7 @@ contract AgentContractsTest is Test {
         treasury.transfer(address(0xCAFE), 1);
     }
 
+    /// @notice Verifies sponsored revenue is split into ops, investor, and platform buckets.
     function testRevenueSplitAndDividendClaim() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -138,6 +148,7 @@ contract AgentContractsTest is Test {
         assertEq(treasury.investorPool(), 0);
     }
 
+    /// @notice Verifies buying more shares auto-claims pending dividends before minting new shares.
     function testBuySharesClaimsPendingDividendsBeforeMint() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -159,6 +170,7 @@ contract AgentContractsTest is Test {
         assertEq(treasury.investorPool(), 0);
     }
 
+    /// @notice Verifies ops spending requires a whitelisted recipient and decrements ops balance.
     function testSpendOpsRequiresWhitelistedRecipient() public {
         AgentTreasury treasury = _mintTreasury();
 
@@ -180,6 +192,7 @@ contract AgentContractsTest is Test {
         assertEq(treasury.operationalBalance(), 0.6 ether);
     }
 
+    /// @notice Verifies the registry owner can withdraw collected mint fees.
     function testMintFeeCanBeWithdrawnByOwner() public {
         vm.prank(architect);
         inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));
@@ -192,6 +205,8 @@ contract AgentContractsTest is Test {
         assertEq(address(inft).balance, 0);
     }
 
+    /// @notice Helper that mints a test agent and returns its treasury.
+    /// @return Treasury instance for the freshly minted agent.
     function _mintTreasury() internal returns (AgentTreasury) {
         vm.prank(architect);
         (uint256 tokenId, address treasury) = inft.mintAgent{value: MINT_FEE}("zg://agent-1", keccak256("prompt"));

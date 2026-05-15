@@ -5,7 +5,12 @@ import {Script} from "forge-std/Script.sol";
 import {AgentINFT} from "../src/AgentINFT.sol";
 import {AgentTreasuryFactory} from "../src/AgentTreasuryFactory.sol";
 
+/// @title AetherNet Contract Deployment Script
+/// @notice Deploys the treasury factory and agent registry with local or environment-provided parameters.
 contract Deploy is Script {
+    /// @notice Broadcasts the core AetherNet contracts and writes a deployment manifest to disk.
+    /// @return factory Deployed treasury factory instance.
+    /// @return inft Deployed agent registry instance.
     function run() external returns (AgentTreasuryFactory factory, AgentINFT inft) {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address platformWallet = vm.envOr("PLATFORM_WALLET", vm.addr(deployerKey));

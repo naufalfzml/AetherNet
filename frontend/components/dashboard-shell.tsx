@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +39,7 @@ const opsCriticalThreshold = parseEther("0.01");
 const opsWarningThreshold = parseEther("0.02");
 const topUpQuickAmount = parseEther("0.02");
 const pageSize = 3;
+const indexerGraceDelayMs = 4_000;
 
 type DashboardAgent = Awaited<ReturnType<typeof fetchAgents>>[number];
 
@@ -86,6 +88,12 @@ function getOpsState(balance: bigint) {
   };
 }
 
+function isLikelyReceiptTimeout(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") || message.includes("timed out");
+}
+
 export function DashboardShell() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -113,7 +121,10 @@ export function DashboardShell() {
   const [positionPage, setPositionPage] = useState(1);
   const [followingPage, setFollowingPage] = useState(1);
 
-  const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: () => fetchAgents(),
+  });
   const followingQuery = useQuery({
     queryKey: ["walletFollowing", address],
     queryFn: () => fetchWalletFollowing(address!),
@@ -366,6 +377,42 @@ export function DashboardShell() {
     await Promise.allSettled([portfolioReads.refetch(), exitReads.refetch()]);
   }
 
+  async function awaitReceiptWithIndexerGrace({
+    hash,
+    toastId,
+    title,
+  }: {
+    hash: `0x${string}`;
+    toastId: number;
+    title: string;
+  }) {
+    let receiptTimedOut = false;
+    try {
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        throw new Error("Transaction reverted on-chain.");
+      }
+    } catch (error) {
+      if (!isLikelyReceiptTimeout(error)) {
+        throw error;
+      }
+      receiptTimedOut = true;
+      upsertToast({
+        id: toastId,
+        title,
+        message: "Transaction broadcasted. Waiting for indexer...",
+        status: "processing",
+        hash,
+      });
+    }
+
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, indexerGraceDelayMs),
+    );
+
+    return receiptTimedOut;
+  }
+
   async function topUpAgent(position: Omit<AgentPosition, "exitValue">) {
     if (!publicClient) return;
     const toastId = Date.now();
@@ -389,11 +436,17 @@ export function DashboardShell() {
         status: "processing",
         hash,
       });
-      await publicClient.waitForTransactionReceipt({ hash });
+      const receiptTimedOut = await awaitReceiptWithIndexerGrace({
+        hash,
+        toastId,
+        title: `Top-up ${position.agent.id}`,
+      });
       upsertToast({
         id: toastId,
         title: `Top-up ${position.agent.id}`,
-        message: "Operational balance updated.",
+        message: receiptTimedOut
+          ? "Transaction broadcasted. Refreshed after indexer delay."
+          : "Operational balance updated.",
         status: "success",
         hash,
       });
@@ -434,11 +487,17 @@ export function DashboardShell() {
         status: "processing",
         hash,
       });
-      await publicClient.waitForTransactionReceipt({ hash });
+      const receiptTimedOut = await awaitReceiptWithIndexerGrace({
+        hash,
+        toastId,
+        title: `Claim ${position.agent.id}`,
+      });
       upsertToast({
         id: toastId,
         title: `Claim ${position.agent.id}`,
-        message: "Dividend claim confirmed.",
+        message: receiptTimedOut
+          ? "Transaction broadcasted. Refreshed after indexer delay."
+          : "Dividend claim confirmed.",
         status: "success",
         hash,
       });
@@ -489,12 +548,16 @@ export function DashboardShell() {
           status: "processing",
           hash,
         });
-        await publicClient.waitForTransactionReceipt({ hash });
+        await awaitReceiptWithIndexerGrace({
+          hash,
+          toastId,
+          title: "Claim all dividends",
+        });
       }
       upsertToast({
         id: toastId,
         title: "Claim all dividends",
-        message: "All pending dividend withdrawals are confirmed.",
+        message: "All pending dividend withdrawals have been broadcasted and refreshed.",
         status: "success",
       });
       await refreshReads();
@@ -517,8 +580,16 @@ export function DashboardShell() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
-              <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212] font-bold text-xl">
-                A
+              <div className="grid size-11 place-items-center rounded-full text-[#121212] font-bold text-xl">
+                <div className="relative size-11 overflow-hidden rounded-full">
+                  <Image
+                    src="/images/logo.png"
+                    alt="AetherNet logo"
+                    fill
+                    sizes="44px"
+                    className="object-cover"
+                  />
+                </div>
               </div>
               <div className="hidden sm:block">
                 <p className="text-xl font-semibold leading-tight">AetherNet</p>

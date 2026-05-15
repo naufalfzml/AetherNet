@@ -51,6 +51,13 @@ import {
 
 const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
+const indexerGraceDelayMs = 4_000;
+
+function isLikelyReceiptTimeout(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("timeout") || message.includes("timed out");
+}
 
 function profilePath(
   agent:
@@ -73,6 +80,9 @@ export function AppShell() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [mintToastId, setMintToastId] = useState<number | null>(null);
+  const [handledMintTimeoutHash, setHandledMintTimeoutHash] = useState<
+    `0x${string}` | null
+  >(null);
   const {
     writeContract,
     data: txHash,
@@ -80,7 +90,7 @@ export function AppShell() {
     isPending,
   } = useWriteContract();
   const receipt = useWaitForTransactionReceipt({ hash: txHash });
-  const agents = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
+  const agents = useQuery({ queryKey: ["agents"], queryFn: () => fetchAgents() });
   const timeline = useQuery({
     queryKey: ["timeline"],
     queryFn: fetchTimeline,
@@ -153,6 +163,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!mintToastId || !txHash) return;
+    setHandledMintTimeoutHash(null);
     upsertToast({
       id: mintToastId,
       title: "Mint transaction submitted",
@@ -178,6 +189,33 @@ export function AppShell() {
 
   useEffect(() => {
     if (!mintToastId || !receipt.isError) return;
+    if (txHash && isLikelyReceiptTimeout(receipt.error)) {
+      if (handledMintTimeoutHash === txHash) return;
+      setHandledMintTimeoutHash(txHash);
+      upsertToast({
+        id: mintToastId,
+        title: "Mint transaction submitted",
+        message: "Transaction broadcasted. Waiting for indexer...",
+        status: "processing",
+        hash: txHash,
+      });
+      void (async () => {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, indexerGraceDelayMs),
+        );
+        await queryClient.invalidateQueries({ queryKey: ["agents"] });
+        upsertToast({
+          id: mintToastId,
+          title: "Agent mint broadcasted",
+          message:
+            "Receipt is delayed, but the transaction was broadcasted. Agent indexing may take a moment.",
+          status: "success",
+          hash: txHash,
+        });
+        window.setTimeout(() => dismissToast(mintToastId), 7_000);
+      })();
+      return;
+    }
     upsertToast({
       id: mintToastId,
       title: "Mint failed",
@@ -185,7 +223,14 @@ export function AppShell() {
       status: "error",
       hash: txHash,
     });
-  }, [mintToastId, receipt.error, receipt.isError, txHash]);
+  }, [
+    handledMintTimeoutHash,
+    mintToastId,
+    queryClient,
+    receipt.error,
+    receipt.isError,
+    txHash,
+  ]);
 
   async function mintAgent(formData: FormData) {
     const prompt = String(formData.get("prompt") ?? "");
@@ -265,8 +310,16 @@ export function AppShell() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center">
             <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
-              <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212] font-bold text-xl">
-                A
+              <div className="grid size-11 place-items-center rounded-full text-[#121212] font-bold text-xl">
+                <div className="relative size-11 overflow-hidden rounded-full">
+                  <Image
+                    src="/images/logo.png"
+                    alt="AetherNet logo"
+                    fill
+                    sizes="44px"
+                    className="object-cover"
+                  />
+                </div>
               </div>
               <div className="hidden sm:block">
                 <p className="text-xl font-semibold leading-tight">AetherNet</p>

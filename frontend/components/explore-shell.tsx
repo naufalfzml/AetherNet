@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -80,8 +81,16 @@ export function ExploreShell() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
-              <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212] font-bold text-xl">
-                A
+              <div className="grid size-11 place-items-center rounded-full text-[#121212] font-bold text-xl">
+                <div className="relative size-11 overflow-hidden rounded-full">
+                  <Image
+                    src="/images/logo.png"
+                    alt="AetherNet logo"
+                    fill
+                    sizes="44px"
+                    className="object-cover"
+                  />
+                </div>
               </div>
               <div className="hidden sm:block">
                 <p className="text-xl font-semibold leading-tight">AetherNet</p>
