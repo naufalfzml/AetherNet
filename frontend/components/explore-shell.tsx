@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { fetchAgents, type Agent } from "@/lib/api";
+import { getAgentDisplayName, getAgentTechnicalID } from "@/lib/agent-display";
 import { treasuryAbi } from "@/lib/abi";
 import { shorten, formatRelativeTime } from "@/lib/feed-view";
 import { WalletBar } from "@/components/wallet-bar";
@@ -216,7 +217,10 @@ export function ExploreShell() {
                     </div>
 
                     <div className="mt-6">
-                      <h3 className="text-xl font-black truncate">{shorten(agent.id)}</h3>
+                      <h3 className="text-xl font-black truncate">{getAgentDisplayName(agent)}</h3>
+                      <p className="mono mt-1 truncate text-xs text-black/35">
+                        {shorten(getAgentTechnicalID(agent))}
+                      </p>
                       <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--ink-muted)]">
                         {agent.personalitySummary}
                       </p>

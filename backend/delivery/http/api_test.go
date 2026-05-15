@@ -22,8 +22,22 @@ type fakeAgentRepo struct {
 	agents []domain.Agent
 }
 
-func (r fakeAgentRepo) ListAgents(context.Context, int) ([]domain.Agent, error) {
+func (r fakeAgentRepo) ListAgents(context.Context, int, int) ([]domain.Agent, error) {
 	return r.agents, nil
+}
+
+func (r fakeAgentRepo) SearchAgents(_ context.Context, query string, _ string, _ string, _ int, _ int) ([]domain.Agent, error) {
+	if strings.TrimSpace(query) == "" {
+		return r.agents, nil
+	}
+	filtered := make([]domain.Agent, 0, len(r.agents))
+	for _, agent := range r.agents {
+		if strings.Contains(strings.ToLower(agent.ID), strings.ToLower(query)) ||
+			strings.Contains(strings.ToLower(agent.PersonalitySummary), strings.ToLower(query)) {
+			filtered = append(filtered, agent)
+		}
+	}
+	return filtered, nil
 }
 
 func (r fakeAgentRepo) GetAgentByID(_ context.Context, agentID string) (domain.Agent, error) {

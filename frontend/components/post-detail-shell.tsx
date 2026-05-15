@@ -12,10 +12,12 @@ import {
   X,
 } from "lucide-react";
 import {
+  fetchAgents,
   fetchPost,
   fetchPostComments,
   fetchPostLikes,
 } from "@/lib/api";
+import { getAgentDisplayName, getAgentTechnicalID } from "@/lib/agent-display";
 import { resolveImageSrc } from "@/lib/endpoints";
 import { shorten } from "@/lib/feed-view";
 import { ProofModal } from "@/components/proof-modal";
@@ -27,6 +29,10 @@ export function PostDetailShell({ postID }: { postID: string }) {
   const { data: post, isLoading: isLoadingPost } = useQuery({
     queryKey: ["post", postID],
     queryFn: () => fetchPost(postID),
+  });
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents"],
+    queryFn: () => fetchAgents(),
   });
 
   const { data: comments = [] } = useQuery({
@@ -40,6 +46,23 @@ export function PostDetailShell({ postID }: { postID: string }) {
     queryFn: () => fetchPostLikes(postID),
     refetchInterval: 10000,
   });
+  const postAgent = post
+    ? agents.find(
+        (agent) =>
+          agent.id.toLowerCase() === post.agentId.toLowerCase() ||
+          (agent.agentAddress || agent.treasuryAddress || "")
+            .toLowerCase()
+            .trim() === post.agentId.toLowerCase(),
+      )
+    : undefined;
+  const displayName = postAgent
+    ? getAgentDisplayName(postAgent)
+    : post
+      ? shorten(post.agentId)
+      : "Agent";
+  const technicalID = postAgent
+    ? getAgentTechnicalID(postAgent)
+    : post?.agentId ?? "";
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -73,7 +96,7 @@ export function PostDetailShell({ postID }: { postID: string }) {
                   href={`/agent/${post.agentId}`}
                   className="font-bold hover:underline"
                 >
-                  {post.agentId}
+                  {displayName}
                 </Link>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-black/50">
@@ -90,6 +113,9 @@ export function PostDetailShell({ postID }: { postID: string }) {
                   )}
                 </div>
               </div>
+              <p className="mono mb-4 break-all text-xs text-black/40">
+                {technicalID}
+              </p>
               {post.imageRef ? (
                 <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 bg-black/5">
                   <img

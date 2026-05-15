@@ -24,7 +24,7 @@ func (r AgentRepository) ListAgents(ctx context.Context, limit int, offset int) 
 
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT ac.agent_id, ac.token_id::text, ac.owner_address, ac.treasury_address, ac.metadata_pointer,
-			COALESCE(NULLIF(ac.personality_summary, ''), NULLIF(am.personality_summary, ''), ac.personality_summary),
+			COALESCE(NULLIF(am.personality_summary, ''), NULLIF(ac.personality_summary, ''), ''),
 			ac.updated_at,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND payload->>'targetAgentId' = ac.agent_id) as followers,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND agent_id = ac.agent_id) as following
@@ -59,7 +59,7 @@ func (r AgentRepository) SearchAgents(ctx context.Context, query string, kind st
 
 	sqlQuery := `
 		SELECT ac.agent_id, ac.token_id::text, ac.owner_address, ac.treasury_address, ac.metadata_pointer,
-			COALESCE(NULLIF(ac.personality_summary, ''), NULLIF(am.personality_summary, ''), ac.personality_summary),
+			COALESCE(NULLIF(am.personality_summary, ''), NULLIF(ac.personality_summary, ''), ''),
 			ac.updated_at,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND payload->>'targetAgentId' = ac.agent_id) as followers,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND agent_id = ac.agent_id) as following
@@ -106,7 +106,7 @@ func (r AgentRepository) SearchAgents(ctx context.Context, query string, kind st
 func (r AgentRepository) GetAgentByID(ctx context.Context, agentID string) (domain.Agent, error) {
 	return r.getAgent(ctx, `
 		SELECT ac.agent_id, ac.token_id::text, ac.owner_address, ac.treasury_address, ac.metadata_pointer,
-			COALESCE(NULLIF(ac.personality_summary, ''), NULLIF(am.personality_summary, ''), ac.personality_summary),
+			COALESCE(NULLIF(am.personality_summary, ''), NULLIF(ac.personality_summary, ''), ''),
 			ac.updated_at,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND payload->>'targetAgentId' = ac.agent_id) as followers,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND agent_id = ac.agent_id) as following
@@ -119,7 +119,7 @@ func (r AgentRepository) GetAgentByID(ctx context.Context, agentID string) (doma
 func (r AgentRepository) GetAgentByTokenID(ctx context.Context, tokenID string) (domain.Agent, error) {
 	return r.getAgent(ctx, `
 		SELECT ac.agent_id, ac.token_id::text, ac.owner_address, ac.treasury_address, ac.metadata_pointer,
-			COALESCE(NULLIF(ac.personality_summary, ''), NULLIF(am.personality_summary, ''), ac.personality_summary),
+			COALESCE(NULLIF(am.personality_summary, ''), NULLIF(ac.personality_summary, ''), ''),
 			ac.updated_at,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND payload->>'targetAgentId' = ac.agent_id) as followers,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND agent_id = ac.agent_id) as following
@@ -132,7 +132,7 @@ func (r AgentRepository) GetAgentByTokenID(ctx context.Context, tokenID string) 
 func (r AgentRepository) GetAgentByAddress(ctx context.Context, agentAddress string) (domain.Agent, error) {
 	return r.getAgent(ctx, `
 		SELECT ac.agent_id, ac.token_id::text, ac.owner_address, ac.treasury_address, ac.metadata_pointer,
-			COALESCE(NULLIF(ac.personality_summary, ''), NULLIF(am.personality_summary, ''), ac.personality_summary),
+			COALESCE(NULLIF(am.personality_summary, ''), NULLIF(ac.personality_summary, ''), ''),
 			ac.updated_at,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND payload->>'targetAgentId' = ac.agent_id) as followers,
 			(SELECT COUNT(*) FROM social_events WHERE type = 'follow' AND agent_id = ac.agent_id) as following
@@ -211,7 +211,7 @@ func scanAgent(scanner agentScanner) (domain.Agent, error) {
 	agent.Kind = "native"
 	agent.AgentAddress = agent.TreasuryAddress
 	if agent.PersonalitySummary == "" {
-		agent.PersonalitySummary = "Indexed agent " + agent.TokenID
+		agent.PersonalitySummary = ""
 	}
 	return agent, nil
 }

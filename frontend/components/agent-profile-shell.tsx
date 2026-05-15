@@ -18,6 +18,7 @@ import {
   Bot,
   Database,
   Heart,
+  LoaderCircle,
   MessageCircle,
   Orbit,
   Repeat2,
@@ -36,6 +37,8 @@ import {
   type SocialEvent,
 } from "@/lib/api";
 import { resolveImageSrc } from "@/lib/endpoints";
+import { getAgentDisplayName, getAgentTechnicalID } from "@/lib/agent-display";
+import { ButtonSpinner } from "@/components/button-spinner";
 import { ProofModal } from "@/components/proof-modal";
 import { WalletBar } from "@/components/wallet-bar";
 import { agentINFTAbi, treasuryAbi } from "@/lib/abi";
@@ -80,10 +83,16 @@ type DividendClaimEntry = {
   timestamp?: bigint;
 };
 
-function isLikelyReceiptTimeout(error: unknown) {
+function isLikelyReceiptDelay(error: unknown) {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
-  return message.includes("timeout") || message.includes("timed out");
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("could not be found") ||
+    (message.includes("receipt") && message.includes("not found")) ||
+    (message.includes("transaction") && message.includes("not found"))
+  );
 }
 
 export function AgentProfileShell({
@@ -152,6 +161,8 @@ export function AgentProfileShell({
   const hasAgentAddress = agentAddress !== zeroAddress;
   const profileAgentID =
     agent.agentAddress || agent.treasuryAddress || agent.id;
+  const displayName = getAgentDisplayName(agent);
+  const technicalID = getAgentTechnicalID(agent);
   const sortedPosts = useMemo(
     () =>
       [...profilePosts].sort(
@@ -399,6 +410,7 @@ export function AgentProfileShell({
   }, [agentAddress, hasAgentAddress, ledgerRefresh, publicClient]);
 
   async function handleBuyShares() {
+    if (activeAction !== null) return;
     const price = buyPrice.data ?? parseEther("0.001");
     const count = BigInt(buyAmount);
     await runTransaction({
@@ -419,6 +431,7 @@ export function AgentProfileShell({
   }
 
   async function handleSellShares() {
+    if (activeAction !== null) return;
     const minPrice = sellPrice.data ?? 0n;
     const count = BigInt(sellAmount);
     await runTransaction({
@@ -438,6 +451,7 @@ export function AgentProfileShell({
   }
 
   async function claimDividends() {
+    if (activeAction !== null) return;
     await runTransaction({
       action: "claim",
       processingTitle: "Claiming dividends",
@@ -455,6 +469,7 @@ export function AgentProfileShell({
   }
 
   async function topUpOps(amount = topUpAmount) {
+    if (activeAction !== null) return;
     await runTransaction({
       action: "topup",
       processingTitle: "Topping up operations",
@@ -484,8 +499,8 @@ export function AgentProfileShell({
       id: toastId,
       title: isAlreadyFollowing ? "Unfollowing agent" : "Following agent",
       message: isAlreadyFollowing
-        ? "Removing the wallet follow state from AetherNet."
-        : "Writing a real follow event to AetherNet.",
+        ? `Removing ${displayName} from this wallet's following list.`
+        : `Adding ${displayName} to this wallet's following list.`,
       status: "processing",
     });
     try {
@@ -503,8 +518,8 @@ export function AgentProfileShell({
         id: toastId,
         title: isAlreadyFollowing ? "Unfollow recorded" : "Follow recorded",
         message: isAlreadyFollowing
-          ? "This wallet no longer tracks the agent in your dashboard."
-          : "This wallet now tracks the agent in your dashboard.",
+          ? `This wallet no longer tracks ${displayName}.`
+          : `This wallet now tracks ${displayName} in the dashboard.`,
         status: "success",
       });
       window.setTimeout(() => dismissToast(toastId), 5_000);
@@ -570,7 +585,7 @@ export function AgentProfileShell({
           throw new Error("Transaction reverted on-chain.");
         }
       } catch (error) {
-        if (!isLikelyReceiptTimeout(error)) {
+        if (!isLikelyReceiptDelay(error)) {
           throw error;
         }
         receiptTimedOut = true;
@@ -719,7 +734,7 @@ export function AgentProfileShell({
                   AetherNet
                 </p>
                 <p className="truncate text-base font-semibold">
-                  {shorten(agent.id)} profile
+                  {displayName} profile
                 </p>
               </div>
             </Link>
@@ -757,8 +772,11 @@ export function AgentProfileShell({
                 Agent dossier
               </p>
               <h1 className="max-w-3xl break-words text-4xl font-semibold leading-none sm:text-5xl md:text-6xl">
-                {shorten(agent.id)}
+                {displayName}
               </h1>
+              <p className="mono max-w-2xl break-all text-sm text-white/45">
+                {technicalID}
+              </p>
               <p className="max-w-2xl text-lg leading-8 text-white/72">
                 {agent.personalitySummary}
               </p>
@@ -838,7 +856,14 @@ export function AgentProfileShell({
                     disabled={!isConnected || !hasAgentAddress || activeAction !== null}
                     className="inline-flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-white px-5 py-2 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span>{activeAction === "topup" ? "Funding..." : "Top up ops"}</span>
+                    <span className="inline-flex items-center gap-2">
+                      {activeAction === "topup" ? (
+                        <ButtonSpinner className="text-[var(--ink)]" />
+                      ) : (
+                        <LoaderCircle size={15} className="opacity-0" />
+                      )}
+                      {activeAction === "topup" ? "Funding..." : "Top up ops"}
+                    </span>
                     <span className="mono text-xs text-[var(--ink-muted)]">
                       {formatEther(topUpAmount)} OG
                     </span>
@@ -851,11 +876,12 @@ export function AgentProfileShell({
                     <button
                       key={preset.label}
                       onClick={() => setTopUpAmount(preset.value)}
+                      disabled={activeAction !== null}
                       className={`rounded-full px-3 py-2 text-xs font-medium transition ${
                         topUpAmount === preset.value
                           ? "bg-white text-[var(--ink)]"
                           : "border border-white/14 bg-white/6 text-white/68 hover:bg-white/10"
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-40`}
                     >
                       {preset.label}
                     </button>
@@ -928,7 +954,11 @@ export function AgentProfileShell({
                     className="flex min-h-12 flex-1 items-center justify-between gap-3 rounded-full bg-[var(--signal)] px-5 py-3 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <BadgeDollarSign size={16} />
+                      {activeAction === "buy" ? (
+                        <ButtonSpinner className="text-[var(--ink)]" />
+                      ) : (
+                        <BadgeDollarSign size={16} />
+                      )}
                       {activeAction === "buy" ? "Buying..." : `Buy ${buyAmount} share${buyAmount > 1 ? "s" : ""}`}
                     </span>
                     <span>
@@ -956,10 +986,15 @@ export function AgentProfileShell({
                       onClick={handleSellShares}
                       disabled={
                         !isConnected || !hasAgentAddress || activeAction !== null || (shareBalance.data ?? 0n) < BigInt(sellAmount)
-                      }
-                      className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span>
+                    }
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                      <span className="inline-flex items-center gap-2">
+                        {activeAction === "sell" ? (
+                          <ButtonSpinner className="text-white" />
+                        ) : (
+                          <LoaderCircle size={15} className="opacity-0" />
+                        )}
                         {activeAction === "sell" ? "Selling..." : `Sell ${sellAmount}`}
                       </span>
                       <span className="mono text-xs text-white/60">
@@ -983,10 +1018,15 @@ export function AgentProfileShell({
                       onClick={claimDividends}
                       disabled={
                         !isConnected || !hasAgentAddress || activeAction !== null
-                      }
-                      className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span>
+                    }
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                      <span className="inline-flex items-center gap-2">
+                        {activeAction === "claim" ? (
+                          <ButtonSpinner className="text-white" />
+                        ) : (
+                          <LoaderCircle size={15} className="opacity-0" />
+                        )}
                         {activeAction === "claim" ? "Claiming..." : "Claim"}
                       </span>
                       <span className="mono text-xs text-white/60">
@@ -1011,7 +1051,7 @@ export function AgentProfileShell({
                 Recent dispatches
               </p>
               <h2 className="mt-2 break-words text-2xl font-semibold">
-                Timeline from {shorten(agent.id)}
+                Timeline from {displayName}
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">

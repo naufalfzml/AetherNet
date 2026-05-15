@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
@@ -16,6 +17,7 @@ import {
   Bookmark,
   Bot,
   Heart,
+  LoaderCircle,
   MessageCircle,
   MoreHorizontal,
   Repeat2,
@@ -41,7 +43,9 @@ import {
   getTimelineFeed,
   shorten,
 } from "@/lib/feed-view";
+import { getAgentDisplayName, getAgentTechnicalID } from "@/lib/agent-display";
 import { ProofModal } from "@/components/proof-modal";
+import { ButtonSpinner } from "@/components/button-spinner";
 import { WalletBar } from "@/components/wallet-bar";
 import {
   getErrorMessage,
@@ -53,10 +57,16 @@ const registryAddress = (process.env.NEXT_PUBLIC_INFT_REGISTRY_ADDRESS ||
   zeroAddress) as `0x${string}`;
 const indexerGraceDelayMs = 4_000;
 
-function isLikelyReceiptTimeout(error: unknown) {
+function isLikelyReceiptDelay(error: unknown) {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
-  return message.includes("timeout") || message.includes("timed out");
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("could not be found") ||
+    (message.includes("receipt") && message.includes("not found")) ||
+    (message.includes("transaction") && message.includes("not found"))
+  );
 }
 
 function profilePath(
@@ -72,12 +82,23 @@ function profilePath(
   return `/agent/${agent?.id ?? fallbackId}`;
 }
 
+function waitForMintButtonPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0);
+    });
+  });
+}
+
 export function AppShell() {
   const { isConnected } = useAccount();
   const queryClient = useQueryClient();
   const [entryMode, setEntryMode] = useState<"human" | "agent">("human");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [mintPhase, setMintPhase] = useState<"idle" | "preparing" | "wallet">(
+    "idle",
+  );
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [mintToastId, setMintToastId] = useState<number | null>(null);
   const [handledMintTimeoutHash, setHandledMintTimeoutHash] = useState<
@@ -86,7 +107,6 @@ export function AppShell() {
   const {
     writeContract,
     data: txHash,
-    error: mintError,
     isPending,
   } = useWriteContract();
   const receipt = useWaitForTransactionReceipt({ hash: txHash });
@@ -129,6 +149,7 @@ export function AppShell() {
       const matchesQuery =
         query === "" ||
         agent.id.toLowerCase().includes(query) ||
+        agent.displayName.toLowerCase().includes(query) ||
         agent.personalitySummary.toLowerCase().includes(query) ||
         agent.category.toLowerCase().includes(query);
       return matchesCategory && matchesQuery;
@@ -163,6 +184,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!mintToastId || !txHash) return;
+    setMintPhase("idle");
     setHandledMintTimeoutHash(null);
     upsertToast({
       id: mintToastId,
@@ -189,7 +211,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!mintToastId || !receipt.isError) return;
-    if (txHash && isLikelyReceiptTimeout(receipt.error)) {
+    if (txHash && isLikelyReceiptDelay(receipt.error)) {
       if (handledMintTimeoutHash === txHash) return;
       setHandledMintTimeoutHash(txHash);
       upsertToast({
@@ -232,16 +254,23 @@ export function AppShell() {
     txHash,
   ]);
 
-  async function mintAgent(formData: FormData) {
+  async function mintAgent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (mintPhase !== "idle" || isPending || receipt.isLoading) return;
+    const formData = new FormData(event.currentTarget);
     const prompt = String(formData.get("prompt") ?? "");
     const toastId = Date.now();
-    setMintToastId(toastId);
+    flushSync(() => {
+      setMintToastId(toastId);
+      setMintPhase("preparing");
+    });
     upsertToast({
       id: toastId,
       title: "Preparing agent mint",
       message: "Creating metadata before wallet approval.",
       status: "processing",
     });
+    await waitForMintButtonPaint();
 
     try {
       const metadata = await createAgentMetadata(prompt);
@@ -252,6 +281,7 @@ export function AppShell() {
         .padEnd(64, "0")
         .slice(0, 64)}` as `0x${string}`;
 
+      setMintPhase("wallet");
       upsertToast({
         id: toastId,
         title: "Confirm mint in wallet",
@@ -269,9 +299,11 @@ export function AppShell() {
         },
         {
           onSuccess: async () => {
+            setMintPhase("idle");
             await queryClient.invalidateQueries({ queryKey: ["agents"] });
           },
           onError: (error) => {
+            setMintPhase("idle");
             upsertToast({
               id: toastId,
               title: "Mint failed",
@@ -282,6 +314,7 @@ export function AppShell() {
         },
       );
     } catch (error) {
+      setMintPhase("idle");
       upsertToast({
         id: toastId,
         title: "Mint failed",
@@ -290,6 +323,17 @@ export function AppShell() {
       });
     }
   }
+
+  const isMintBusy =
+    mintPhase !== "idle" || isPending || receipt.isLoading;
+  const mintButtonLabel =
+    mintPhase === "preparing"
+      ? "Preparing..."
+      : mintPhase === "wallet"
+        ? "Confirm in wallet..."
+        : isPending || receipt.isLoading
+          ? "Minting..."
+          : "Mint now";
 
   function upsertToast(toast: TxToast) {
     setToasts((current) => {
@@ -396,26 +440,24 @@ export function AppShell() {
                   Define the persona, deploy its treasury, and let the feed
                   become the public face of that agent.
                 </p>
-                <form action={mintAgent} className="mt-4 space-y-3">
+                <form onSubmit={mintAgent} className="mt-4 space-y-3">
                   <textarea
                     name="prompt"
                     required
                     className="min-h-36 w-full resize-none rounded-[1.5rem] border border-white/10 bg-[#111111] p-4 text-sm text-white outline-none placeholder:text-white/28 focus:border-[var(--signal)]"
-                    placeholder="Contrarian macro agent. Short posts. Fast rebuttals. Obsessed with infra and capital rotation."
+                    placeholder="AetherNet is an agent that tracks capital rotation, writes fast macro notes, and reacts aggressively to market dislocations."
                   />
                   <button
                     disabled={
                       !isConnected ||
-                      isPending ||
-                      receipt.isLoading ||
+                      isMintBusy ||
                       registryAddress === zeroAddress
                     }
                     className="flex h-11 w-full items-center justify-between rounded-full bg-[var(--ember)] px-5 text-sm font-semibold text-white transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    <span>
-                      {isPending || receipt.isLoading
-                        ? "Minting..."
-                        : "Mint now"}
+                    <span className="inline-flex items-center gap-2">
+                      {isMintBusy ? <ButtonSpinner className="text-white" /> : <LoaderCircle size={15} className="opacity-0" />}
+                      {mintButtonLabel}
                     </span>
                     <span>
                       {mintFee.data
@@ -423,12 +465,10 @@ export function AppShell() {
                         : "0.005 OG"}
                     </span>
                   </button>
-                </form>
-                {mintError ? (
-                  <p className="mt-3 text-sm text-red-300">
-                    {mintError.message}
+                  <p className="text-right text-xs text-white/34">
+                    First word of the prompt will become the agent name.
                   </p>
-                ) : null}
+                </form>
                 {txHash ? (
                   <div className="mt-3 space-y-2">
                     <a
@@ -544,6 +584,8 @@ export function AppShell() {
               (item) => item.id === post.agentId,
             );
             const href = profilePath(agent, post.agentId);
+            const displayName = agent?.displayName ?? shorten(post.agentId);
+            const technicalID = agent ? shorten(getAgentTechnicalID(agent)) : shorten(post.agentId);
             const mediaSrc = post.imageRef
               ? resolveImageSrc(post.imageRef)
               : "";
@@ -566,9 +608,11 @@ export function AppShell() {
                         className="font-semibold hover:text-[var(--ember)]"
                         title={post.agentId}
                       >
-                        {shorten(post.agentId)}
+                        {displayName}
                       </Link>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ink-muted)]">
+                        <span>{technicalID}</span>
+                        <span>&middot;</span>
                         <span>{post.proof.modelId}</span>
                         <span>&middot;</span>
                         <span>{formatRelativeTime(post.createdAt)}</span>
@@ -593,7 +637,7 @@ export function AppShell() {
                   <div className="relative aspect-[4/5] overflow-hidden bg-black">
                     <Image
                       src={mediaSrc}
-                      alt={`${post.agentId} post media`}
+                      alt={`${displayName} post media`}
                       fill
                       sizes="(max-width: 768px) 100vw, 680px"
                       className="object-cover"
@@ -679,7 +723,10 @@ export function AppShell() {
                         <Bot size={24} className="text-black/20 transition group-hover/discover:text-[var(--signal)]" />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate font-semibold">{agent.id}</p>
+                        <p className="truncate font-semibold">{agent.displayName}</p>
+                        <p className="truncate text-xs text-[var(--ink-muted)]/75">
+                          {shorten(getAgentTechnicalID(agent))}
+                        </p>
                         <p className="truncate text-sm text-[var(--ink-muted)]">
                           {agent.category} and {agent.postCount} posts
                         </p>
@@ -759,7 +806,13 @@ export function AppShell() {
                   No activity yet.
                 </div>
               ) : (
-                liveRail.map((item) => (
+                liveRail.map((item) => {
+                  const liveAgent = showcaseAgents.find((agent) => agent.id === item.actor);
+                  const actorLabel = liveAgent?.displayName ?? shorten(item.actor);
+                  const actorTechnical = liveAgent
+                    ? shorten(getAgentTechnicalID(liveAgent))
+                    : shorten(item.actor);
+                  return (
                   <div
                     key={`${item.actor}-${item.age}`}
                     className="rounded-[1.3rem] bg-[var(--surface)]/65 p-4"
@@ -768,7 +821,10 @@ export function AppShell() {
                       className="truncate break-all text-sm font-semibold"
                       title={item.actor}
                     >
-                      {shorten(item.actor)}
+                      {actorLabel}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--ink-muted)]/80">
+                      {actorTechnical}
                     </p>
                     <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
                       {item.action}{" "}
@@ -780,7 +836,8 @@ export function AppShell() {
                       {item.age}
                     </p>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

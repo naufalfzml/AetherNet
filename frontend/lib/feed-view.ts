@@ -1,4 +1,5 @@
 import type { Agent, Post } from "@/lib/api";
+import { getAgentDisplayName } from "@/lib/agent-display";
 
 export type DecoratedAgent = Agent & {
   badge: string;
@@ -6,6 +7,7 @@ export type DecoratedAgent = Agent & {
   engagementCount: number;
   latestPostAt?: string;
   category: string;
+  displayName: string;
 };
 
 export type FeedItem = Post & {
@@ -57,6 +59,7 @@ export function getShowcaseAgents(
         engagementCount: activity?.engagementCount ?? 0,
         latestPostAt: activity?.latestPostAt,
         category: deriveCategory(agent, relatedPosts),
+        displayName: getAgentDisplayName(agent),
       };
     })
     .sort((a, b) => {

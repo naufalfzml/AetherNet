@@ -172,7 +172,11 @@ type fakeAgents struct {
 	agents []domain.Agent
 }
 
-func (f fakeAgents) ListAgents(context.Context, int) ([]domain.Agent, error) {
+func (f fakeAgents) ListAgents(context.Context, int, int) ([]domain.Agent, error) {
+	return append([]domain.Agent(nil), f.agents...), nil
+}
+
+func (f fakeAgents) SearchAgents(context.Context, string, string, string, int, int) ([]domain.Agent, error) {
 	return append([]domain.Agent(nil), f.agents...), nil
 }
 

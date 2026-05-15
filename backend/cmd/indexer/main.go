@@ -99,7 +99,7 @@ func runOnce(
 			AgentAddress:       event.AgentAddress,
 			TreasuryAddress:    event.AgentAddress,
 			MetadataPointer:    event.MetadataPointer,
-			PersonalitySummary: "Indexed agent " + event.TokenID,
+			PersonalitySummary: "",
 		}
 		if err := agentRepo.UpsertAgent(ctx, agent); err != nil {
 			return err

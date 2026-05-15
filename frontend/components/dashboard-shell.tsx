@@ -20,14 +20,17 @@ import {
   ChevronRight,
   Coins,
   Fuel,
+  LoaderCircle,
   Search,
   TrendingUp,
   Wallet,
   Users2,
 } from "lucide-react";
 import { fetchAgents, fetchWalletFollowing } from "@/lib/api";
+import { getAgentDisplayName, getAgentTechnicalID } from "@/lib/agent-display";
 import { treasuryAbi } from "@/lib/abi";
 import { shorten, formatRelativeTime } from "@/lib/feed-view";
+import { ButtonSpinner } from "@/components/button-spinner";
 import { WalletBar } from "@/components/wallet-bar";
 import {
   getErrorMessage,
@@ -88,10 +91,16 @@ function getOpsState(balance: bigint) {
   };
 }
 
-function isLikelyReceiptTimeout(error: unknown) {
+function isLikelyReceiptDelay(error: unknown) {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
-  return message.includes("timeout") || message.includes("timed out");
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("could not be found") ||
+    (message.includes("receipt") && message.includes("not found")) ||
+    (message.includes("transaction") && message.includes("not found"))
+  );
 }
 
 export function DashboardShell() {
@@ -253,6 +262,7 @@ export function DashboardShell() {
       const matchesSearch =
         query === "" ||
         position.agent.id.toLowerCase().includes(query) ||
+        getAgentDisplayName(position.agent).toLowerCase().includes(query) ||
         position.agent.personalitySummary.toLowerCase().includes(query) ||
         position.agent.ownerAddress.toLowerCase().includes(query);
       if (!matchesSearch) return false;
@@ -275,7 +285,7 @@ export function DashboardShell() {
   const sortedAgents = useMemo(() => {
     return [...filteredAgents].sort((a, b) => {
       if (agentSort === "alphabetical") {
-        return a.agent.id.localeCompare(b.agent.id);
+        return getAgentDisplayName(a.agent).localeCompare(getAgentDisplayName(b.agent));
       }
       if (agentSort === "lowest-ops") {
         return Number(a.operationalBalance - b.operationalBalance);
@@ -299,7 +309,7 @@ export function DashboardShell() {
   const sortedPositions = useMemo(() => {
     return [...investedPositions].sort((a, b) => {
       if (positionSort === "alphabetical") {
-        return a.agent.id.localeCompare(b.agent.id);
+        return getAgentDisplayName(a.agent).localeCompare(getAgentDisplayName(b.agent));
       }
       if (positionSort === "exit-value") {
         return Number(b.exitValue - a.exitValue);
@@ -393,7 +403,7 @@ export function DashboardShell() {
         throw new Error("Transaction reverted on-chain.");
       }
     } catch (error) {
-      if (!isLikelyReceiptTimeout(error)) {
+      if (!isLikelyReceiptDelay(error)) {
         throw error;
       }
       receiptTimedOut = true;
@@ -414,7 +424,7 @@ export function DashboardShell() {
   }
 
   async function topUpAgent(position: Omit<AgentPosition, "exitValue">) {
-    if (!publicClient) return;
+    if (!publicClient || activeAction !== null) return;
     const toastId = Date.now();
     setActiveAction(`topup:${position.agent.id}`);
     upsertToast({
@@ -464,7 +474,7 @@ export function DashboardShell() {
   }
 
   async function claimPosition(position: AgentPosition) {
-    if (!publicClient) return;
+    if (!publicClient || activeAction !== null) return;
     const toastId = Date.now();
     setActiveAction(`claim:${position.agent.id}`);
     upsertToast({
@@ -515,7 +525,7 @@ export function DashboardShell() {
   }
 
   async function claimAll() {
-    if (!publicClient) return;
+    if (!publicClient || activeAction !== null) return;
     const targets = investedPositions.filter((position) => position.claimable > 0n);
     if (targets.length === 0) return;
 
@@ -677,14 +687,17 @@ export function DashboardShell() {
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {pagedCriticalAgents.map((position) => (
                     <div key={position.agent.id} className="flex flex-col justify-between rounded-xl border border-red-200 bg-white p-4 shadow-sm">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <Link href={agentProfilePath(position.agent)} className="font-bold hover:underline">
-                            {shorten(position.agent.id)}
-                          </Link>
-                          <span className="text-xs font-bold text-red-500 uppercase">Critical</span>
-                        </div>
-                        <div className="mt-3">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <Link href={agentProfilePath(position.agent)} className="font-bold hover:underline">
+                            {getAgentDisplayName(position.agent)}
+                            </Link>
+                            <span className="text-xs font-bold text-red-500 uppercase">Critical</span>
+                          </div>
+                          <p className="mono mt-1 truncate text-xs text-black/35">
+                            {shorten(getAgentTechnicalID(position.agent))}
+                          </p>
+                          <div className="mt-3">
                           <p className="text-xs text-black/40 uppercase tracking-wider">Runway</p>
                           <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-red-100">
                             <div className="h-full bg-red-500" style={{ width: "15%" }} />
@@ -697,9 +710,19 @@ export function DashboardShell() {
                       <button
                         onClick={() => void topUpAgent(position)}
                         disabled={activeAction === `topup:${position.agent.id}`}
-                        className="mt-4 w-full rounded-lg bg-red-600 py-2 text-xs font-bold text-white transition hover:bg-red-700"
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {activeAction === `topup:${position.agent.id}` ? "Funding..." : "Top up 0.02 OG"}
+                        {activeAction === `topup:${position.agent.id}` ? (
+                          <>
+                            <ButtonSpinner className="text-white" />
+                            Funding...
+                          </>
+                        ) : (
+                          <>
+                            <LoaderCircle size={15} className="opacity-0" />
+                            Top up 0.02 OG
+                          </>
+                        )}
                       </button>
                     </div>
                   ))}
@@ -774,10 +797,13 @@ export function DashboardShell() {
                             <div>
                               <div className="flex items-start justify-between">
                                 <Link href={agentProfilePath(position.agent)} className="text-xl font-bold hover:text-[var(--ember)] transition">
-                                  {shorten(position.agent.id)}
+                                  {getAgentDisplayName(position.agent)}
                                 </Link>
                                 <StatusPill state={opsState} />
                               </div>
+                              <p className="mono mt-1 truncate text-xs text-black/35">
+                                {shorten(getAgentTechnicalID(position.agent))}
+                              </p>
                               <div className="mt-6 space-y-4">
                                 <div>
                                   <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-black/40">
@@ -800,9 +826,19 @@ export function DashboardShell() {
                             <button
                               onClick={() => void topUpAgent(position)}
                               disabled={activeAction === `topup:${position.agent.id}`}
-                              className="mt-6 flex h-10 w-full items-center justify-center rounded-xl bg-[var(--ink)] text-xs font-bold text-white transition hover:bg-black/80 disabled:opacity-50"
+                              className="mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] text-xs font-bold text-white transition hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {activeAction === `topup:${position.agent.id}` ? "Processing..." : "Quick Top-up (0.02 OG)"}
+                              {activeAction === `topup:${position.agent.id}` ? (
+                                <>
+                                  <ButtonSpinner className="text-white" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <LoaderCircle size={15} className="opacity-0" />
+                                  Quick Top-up (0.02 OG)
+                                </>
+                              )}
                             </button>
                           </div>
                         );
@@ -827,9 +863,19 @@ export function DashboardShell() {
                     <button
                       onClick={claimAll}
                       disabled={activeAction === "claim-all" || portfolioSummary.totalClaimable === 0n}
-                      className="rounded-full border border-black px-5 py-2 text-xs font-bold transition hover:bg-black hover:text-white disabled:opacity-30"
+                      className="inline-flex items-center gap-2 rounded-full border border-black px-5 py-2 text-xs font-bold transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                     >
-                      {activeAction === "claim-all" ? "Claiming All..." : "Claim All Dividends"}
+                      {activeAction === "claim-all" ? (
+                        <>
+                          <ButtonSpinner className="text-current" />
+                          Claiming All...
+                        </>
+                      ) : (
+                        <>
+                          <LoaderCircle size={15} className="opacity-0" />
+                          Claim All Dividends
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -844,12 +890,15 @@ export function DashboardShell() {
                         <div key={position.agent.id} className="rounded-2xl border border-black/10 bg-white p-6">
                           <div className="flex items-center justify-between">
                             <Link href={agentProfilePath(position.agent)} className="text-xl font-bold hover:text-[var(--ember)] transition">
-                              {shorten(position.agent.id)}
+                              {getAgentDisplayName(position.agent)}
                             </Link>
                             <span className="mono text-xs text-black/40 font-bold">
                               {position.shares.toString()} SHARES
                             </span>
                           </div>
+                          <p className="mono mt-1 truncate text-xs text-black/35">
+                            {shorten(getAgentTechnicalID(position.agent))}
+                          </p>
                           
                           <div className="mt-8 grid grid-cols-2 gap-8">
                             <div>
@@ -865,9 +914,19 @@ export function DashboardShell() {
                           <button
                             onClick={() => void claimPosition(position)}
                             disabled={position.claimable === 0n || activeAction === `claim:${position.agent.id}`}
-                            className="mt-8 w-full rounded-xl border border-black py-3 text-xs font-bold transition hover:bg-black hover:text-white disabled:opacity-20"
+                            className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-black py-3 text-xs font-bold transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
                           >
-                            {activeAction === `claim:${position.agent.id}` ? "Claiming..." : "Withdraw Dividends"}
+                            {activeAction === `claim:${position.agent.id}` ? (
+                              <>
+                                <ButtonSpinner className="text-current" />
+                                Claiming...
+                              </>
+                            ) : (
+                              <>
+                                <LoaderCircle size={15} className="opacity-0" />
+                                Withdraw Dividends
+                              </>
+                            )}
                           </button>
                         </div>
                       ))}
@@ -903,7 +962,12 @@ export function DashboardShell() {
                             <div className="size-9 rounded-xl bg-black/5 grid place-items-center group-hover:bg-[var(--signal)]/10 transition">
                               <Bot size={18} className="text-black/30 transition group-hover:text-[var(--signal)]" />
                             </div>
-                            <span className="font-bold">{shorten(agent.id)}</span>
+                            <div className="min-w-0">
+                              <p className="truncate font-bold">{getAgentDisplayName(agent)}</p>
+                              <p className="mono truncate text-xs text-black/35">
+                                {shorten(getAgentTechnicalID(agent))}
+                              </p>
+                            </div>
                           </div>
                           <p className="mt-3 text-sm text-black/50 line-clamp-2 leading-relaxed">
                             {agent.personalitySummary}
