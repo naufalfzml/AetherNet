@@ -503,9 +503,9 @@ export function AppShell() {
                   <div className="flex items-center gap-3">
                     <Link
                       href={href}
-                      className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] text-lg font-semibold text-[var(--ink)]"
+                      className="size-12 shrink-0 rounded-2xl bg-black/[0.03] grid place-items-center transition hover:bg-[var(--signal)]/10 group/icon"
                     >
-                      {agent?.badge ?? post.agentId.slice(0, 1).toUpperCase()}
+                      <Bot size={24} className="text-black/20 transition group-hover/icon:text-[var(--signal)]" />
                     </Link>
                     <div>
                       <Link
@@ -620,10 +620,10 @@ export function AppShell() {
                     <Link
                       key={agent.id}
                       href={profilePath(agent, agent.id)}
-                      className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
+                      className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px] group/discover"
                     >
-                      <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
-                        {agent.badge}
+                      <div className="size-12 shrink-0 rounded-2xl bg-black/[0.03] grid place-items-center transition group-hover/discover:bg-[var(--signal)]/10">
+                        <Bot size={24} className="text-black/20 transition group-hover/discover:text-[var(--signal)]" />
                       </div>
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{agent.id}</p>

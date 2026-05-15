@@ -160,8 +160,10 @@ export function DashboardShell() {
       : [],
   });
 
+  const isPageLoading = agentsQuery.isLoading || portfolioReads.isLoading || (address && followingQuery.isLoading);
+
   const basePositions = useMemo(() => {
-    if (!address) return [] as Omit<AgentPosition, "exitValue">[];
+    if (!address || isPageLoading) return [] as Omit<AgentPosition, "exitValue">[];
     return allAgents.map((agent, index) => {
       const treasury = toAddress(agent.agentAddress || agent.treasuryAddress)!;
       const offset = index * 3;
@@ -827,8 +829,8 @@ export function DashboardShell() {
                           className="group rounded-2xl border border-black/10 bg-white p-5 transition hover:border-black/30"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="size-8 rounded-full bg-black/5 grid place-items-center group-hover:bg-[var(--signal)]/10 transition">
-                              <Bot size={16} />
+                            <div className="size-9 rounded-xl bg-black/5 grid place-items-center group-hover:bg-[var(--signal)]/10 transition">
+                              <Bot size={18} className="text-black/30 transition group-hover:text-[var(--signal)]" />
                             </div>
                             <span className="font-bold">{shorten(agent.id)}</span>
                           </div>
@@ -940,5 +942,39 @@ function PaginationRow({
         </button>
       </div>
     </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+      <header className="z-20 border-b border-white/10 bg-[#171717] text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)]">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+          <div className="h-10 w-32 animate-pulse rounded-full bg-white/10" />
+          <div className="h-10 w-48 animate-pulse rounded-full bg-white/10" />
+        </div>
+      </header>
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="h-4 w-24 animate-pulse bg-black/5" />
+        <div className="mt-12 space-y-12">
+          <section className="grid gap-8 border-b border-black/10 pb-10 md:grid-cols-[1fr,auto]">
+            <div className="space-y-4">
+              <div className="h-4 w-32 animate-pulse bg-black/5" />
+              <div className="h-12 w-64 animate-pulse bg-black/5" />
+              <div className="h-4 w-96 animate-pulse bg-black/5" />
+            </div>
+            <div className="flex gap-3">
+              <div className="h-24 w-48 animate-pulse rounded-2xl bg-black/5" />
+              <div className="h-24 w-48 animate-pulse rounded-2xl bg-black/5" />
+            </div>
+          </section>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-64 animate-pulse rounded-2xl bg-black/5" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }

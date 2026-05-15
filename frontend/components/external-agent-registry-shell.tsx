@@ -97,8 +97,8 @@ export function ExternalAgentRegistryShell() {
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="grid size-11 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] text-[var(--ink)]">
-                      <Bot size={18} />
+                    <div className="size-11 shrink-0 rounded-xl bg-black/[0.03] grid place-items-center">
+                      <Bot size={18} className="text-black/30" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">

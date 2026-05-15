@@ -15,6 +15,7 @@ import {
   Activity,
   ArrowLeft,
   BadgeDollarSign,
+  Bot,
   Database,
   Heart,
   MessageCircle,
@@ -104,6 +105,8 @@ export function AgentProfileShell({
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [profilePosts, setProfilePosts] = useState(posts);
   const [topUpAmount, setTopUpAmount] = useState<bigint>(defaultTopUp);
+  const [buyAmount, setBuyAmount] = useState<number>(1);
+  const [sellAmount, setSellAmount] = useState<number>(1);
 
   const { data: agentStats, refetch: refetchStats } = useQuery({
     queryKey: ["agentStats", agent.id],
@@ -155,14 +158,14 @@ export function AgentProfileShell({
     address: agentAddress,
     abi: treasuryAbi,
     functionName: "getBuyPrice",
-    args: [1n],
+    args: [BigInt(buyAmount)],
     query: { enabled: hasAgentAddress },
   });
   const sellPrice = useReadContract({
     address: agentAddress,
     abi: treasuryAbi,
     functionName: "getSellPrice",
-    args: [1n],
+    args: [BigInt(sellAmount)],
     query: { enabled: hasAgentAddress },
   });
   const shareBalance = useReadContract({
@@ -388,12 +391,13 @@ export function AgentProfileShell({
     };
   }, [agentAddress, hasAgentAddress, ledgerRefresh, publicClient]);
 
-  async function buyOneShare() {
+  async function handleBuyShares() {
     const price = buyPrice.data ?? parseEther("0.001");
+    const count = BigInt(buyAmount);
     await runTransaction({
       action: "buy",
-      processingTitle: "Buying 1 share",
-      successTitle: "Share bought",
+      processingTitle: `Buying ${buyAmount} share${buyAmount > 1 ? "s" : ""}`,
+      successTitle: `${buyAmount} share${buyAmount > 1 ? "s" : ""} bought`,
       errorTitle: "Buy failed",
       startMessage: `Waiting for wallet approval for ${formatEther(price)} OG.`,
       run: () =>
@@ -401,18 +405,19 @@ export function AgentProfileShell({
           address: agentAddress,
           abi: treasuryAbi,
           functionName: "buyShares",
-          args: [1n, price],
+          args: [count, price],
           value: price,
         }),
     });
   }
 
-  async function sellOneShare() {
+  async function handleSellShares() {
     const minPrice = sellPrice.data ?? 0n;
+    const count = BigInt(sellAmount);
     await runTransaction({
       action: "sell",
-      processingTitle: "Selling 1 share",
-      successTitle: "Share sold",
+      processingTitle: `Selling ${sellAmount} share${sellAmount > 1 ? "s" : ""}`,
+      successTitle: `${sellAmount} share${sellAmount > 1 ? "s" : ""} sold`,
       errorTitle: "Sell failed",
       startMessage: `Waiting for wallet approval. Minimum return is ${formatEther(minPrice)} OG.`,
       run: () =>
@@ -420,7 +425,7 @@ export function AgentProfileShell({
           address: agentAddress,
           abi: treasuryAbi,
           functionName: "sellShares",
-          args: [1n, minPrice],
+          args: [count, minPrice],
         }),
     });
   }
@@ -678,8 +683,8 @@ export function AgentProfileShell({
         <header className="relative z-10 border-b border-white/10">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <Link href="/" className="flex min-w-0 items-center gap-3">
-              <div className="grid size-10 shrink-0 place-items-center rounded-full border border-white/15 bg-white/5 text-lg">
-                A
+              <div className="size-10 shrink-0 rounded-xl bg-white/10 grid place-items-center border border-white/10 group/icon">
+                <Bot size={20} className="text-white/60 transition group-hover/icon:text-[var(--signal)]" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm uppercase tracking-[0.28em] text-white/45">
@@ -793,33 +798,42 @@ export function AgentProfileShell({
                   <p className="mt-2 max-w-xl text-sm leading-6 text-white/72">
                     {opsRunway.message}
                   </p>
+                  {!isOwner && (
+                    <p className="mt-3 text-xs italic text-white/40">
+                      Operational funding is managed exclusively by the architect/owner.
+                    </p>
+                  )}
                 </div>
-                <button
-                  onClick={() => topUpOps()}
-                  disabled={!isConnected || !hasAgentAddress || activeAction !== null}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-white px-5 py-2 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>{activeAction === "topup" ? "Funding..." : "Top up ops"}</span>
-                  <span className="mono text-xs text-[var(--ink-muted)]">
-                    {formatEther(topUpAmount)} OG
-                  </span>
-                </button>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {topUpPresets.map((preset) => (
+                {isOwner && (
                   <button
-                    key={preset.label}
-                    onClick={() => setTopUpAmount(preset.value)}
-                    className={`rounded-full px-3 py-2 text-xs font-medium transition ${
-                      topUpAmount === preset.value
-                        ? "bg-white text-[var(--ink)]"
-                        : "border border-white/14 bg-white/6 text-white/68 hover:bg-white/10"
-                    }`}
+                    onClick={() => topUpOps()}
+                    disabled={!isConnected || !hasAgentAddress || activeAction !== null}
+                    className="inline-flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-white px-5 py-2 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {preset.label}
+                    <span>{activeAction === "topup" ? "Funding..." : "Top up ops"}</span>
+                    <span className="mono text-xs text-[var(--ink-muted)]">
+                      {formatEther(topUpAmount)} OG
+                    </span>
                   </button>
-                ))}
+                )}
               </div>
+              {isOwner && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {topUpPresets.map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => setTopUpAmount(preset.value)}
+                      className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+                        topUpAmount === preset.value
+                          ? "bg-white text-[var(--ink)]"
+                          : "border border-white/14 bg-white/6 text-white/68 hover:bg-white/10"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -865,55 +879,96 @@ export function AgentProfileShell({
               />
             </div>
 
-            <div className="mt-6 space-y-3 border-t border-white/10 pt-6">
-              <button
-                onClick={buyOneShare}
-                disabled={
-                  !isConnected || !hasAgentAddress || activeAction !== null
-                }
-                className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-[var(--signal)] px-5 py-3 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <BadgeDollarSign size={16} />
-                  {activeAction === "buy" ? "Buying..." : "Buy 1 share"}
-                </span>
-                <span>
-                  {buyPrice.data ? `${formatEther(buyPrice.data)} OG` : "--"}
-                </span>
-              </button>
+            <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
+              <div className="space-y-2">
+                <p className="mono text-[10px] uppercase tracking-[0.2em] text-white/45">
+                  Investment amount
+                </p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    value={buyAmount}
+                    onChange={(e) => setBuyAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-24 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-center font-mono text-white outline-none focus:border-[var(--signal)]"
+                  />
+                  <button
+                    onClick={handleBuyShares}
+                    disabled={
+                      !isConnected || !hasAgentAddress || activeAction !== null
+                    }
+                    className="flex min-h-12 flex-1 items-center justify-between gap-3 rounded-full bg-[var(--signal)] px-5 py-3 text-sm font-semibold text-[var(--ink)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <BadgeDollarSign size={16} />
+                      {activeAction === "buy" ? "Buying..." : `Buy ${buyAmount} share${buyAmount > 1 ? "s" : ""}`}
+                    </span>
+                    <span>
+                      {buyPrice.data ? `${formatEther(buyPrice.data)} OG` : "--"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  onClick={sellOneShare}
-                  disabled={
-                    !isConnected || !hasAgentAddress || activeAction !== null
-                  }
-                  className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>
-                    {activeAction === "sell" ? "Selling..." : "Sell 1"}
-                  </span>
-                  <span className="mono text-xs text-white/60">
-                    {sellPrice.data
-                      ? `${formatEther(sellPrice.data)} OG`
-                      : "--"}
-                  </span>
-                </button>
-                <button
-                  onClick={claimDividends}
-                  disabled={
-                    !isConnected || !hasAgentAddress || activeAction !== null
-                  }
-                  className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>
-                    {activeAction === "claim" ? "Claiming..." : "Claim"}
-                  </span>
-                  <span className="mono text-xs text-white/60">
-                    {claimable.data
-                      ? `${formatEther(claimable.data)} OG`
-                      : "0 OG"}
-                  </span>
-                </button>
+                <div className="space-y-2">
+                  <p className="mono text-[10px] uppercase tracking-[0.2em] text-white/45">
+                    Sell amount
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={shareBalance.data ? Number(shareBalance.data) : undefined}
+                      value={sellAmount}
+                      onChange={(e) => setSellAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-center font-mono text-white outline-none focus:border-white/30"
+                    />
+                    <button
+                      onClick={handleSellShares}
+                      disabled={
+                        !isConnected || !hasAgentAddress || activeAction !== null || (shareBalance.data ?? 0n) < BigInt(sellAmount)
+                      }
+                      className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span>
+                        {activeAction === "sell" ? "Selling..." : `Sell ${sellAmount}`}
+                      </span>
+                      <span className="mono text-xs text-white/60">
+                        {sellPrice.data
+                          ? `${formatEther(sellPrice.data)} OG`
+                          : "--"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="mono text-[10px] uppercase tracking-[0.2em] text-white/45">
+                    Dividends
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <div className="h-[42px] flex items-center px-3 text-xs text-white/40">
+                      Claimable yield
+                    </div>
+                    <button
+                      onClick={claimDividends}
+                      disabled={
+                        !isConnected || !hasAgentAddress || activeAction !== null
+                      }
+                      className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span>
+                        {activeAction === "claim" ? "Claiming..." : "Claim"}
+                      </span>
+                      <span className="mono text-xs text-white/60">
+                        {claimable.data
+                          ? `${formatEther(claimable.data)} OG`
+                          : "0 OG"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
