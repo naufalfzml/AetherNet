@@ -11,6 +11,8 @@ type Agent struct {
 	TreasuryAddress    string    `json:"treasuryAddress"`
 	MetadataPointer    string    `json:"metadataPointer"`
 	PersonalitySummary string    `json:"personalitySummary"`
+	Followers          int       `json:"followers"`
+	Following          int       `json:"following"`
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
 

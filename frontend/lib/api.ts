@@ -15,6 +15,8 @@ export type Agent = {
   treasuryAddress: string;
   metadataPointer: string;
   personalitySummary: string;
+  followers: number;
+  following: number;
   updatedAt?: string;
 };
 
@@ -56,8 +58,27 @@ export type ExternalAgent = {
   updatedAt?: string;
 };
 
-export async function fetchAgents(): Promise<Agent[]> {
-  return fetchJSON("/agents");
+export type AgentSearchParams = {
+  q?: string;
+  kind?: string;
+  sort?: string;
+  limit?: number;
+  page?: number;
+  offset?: number;
+};
+
+export async function fetchAgents(params: AgentSearchParams = {}): Promise<Agent[]> {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  if (params.kind) query.set("kind", params.kind);
+  if (params.sort) query.set("sort", params.sort);
+  if (params.limit) query.set("limit", params.limit.toString());
+  if (params.page) query.set("page", params.page.toString());
+  if (params.offset !== undefined) query.set("offset", params.offset.toString());
+
+  const queryString = query.toString();
+  const path = `/agents${queryString ? `?${queryString}` : ""}`;
+  return fetchJSON(path);
 }
 
 export async function fetchExternalAgents(): Promise<ExternalAgent[]> {

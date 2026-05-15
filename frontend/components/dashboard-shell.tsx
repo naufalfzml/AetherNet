@@ -22,6 +22,7 @@ import {
   Search,
   TrendingUp,
   Wallet,
+  Users2,
 } from "lucide-react";
 import { fetchAgents, fetchWalletFollowing } from "@/lib/api";
 import { treasuryAbi } from "@/lib/abi";
@@ -92,6 +93,8 @@ export function DashboardShell() {
   const { writeContractAsync } = useWriteContract();
   const [toasts, setToasts] = useState<TxToast[]>([]);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"agents" | "investments" | "following">("agents");
+
   const [opsSort, setOpsSort] = useState<"lowest" | "alphabetical" | "recent">(
     "lowest",
   );
@@ -109,6 +112,7 @@ export function DashboardShell() {
   >("claimable");
   const [positionPage, setPositionPage] = useState(1);
   const [followingPage, setFollowingPage] = useState(1);
+
   const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
   const followingQuery = useQuery({
     queryKey: ["walletFollowing", address],
@@ -120,6 +124,7 @@ export function DashboardShell() {
     () => (agentsQuery.data ?? []).filter((agent) => toAddress(agent.agentAddress || agent.treasuryAddress)),
     [agentsQuery.data],
   );
+
   const ownedAgents = useMemo(() => {
     if (!address) return [] as DashboardAgent[];
     return allAgents.filter(
@@ -294,6 +299,7 @@ export function DashboardShell() {
     const start = (positionPage - 1) * pageSize;
     return sortedPositions.slice(start, start + pageSize);
   }, [positionPage, sortedPositions]);
+
   const pagedFollowing = useMemo(() => {
     const start = (followingPage - 1) * pageSize;
     return (followingQuery.data ?? []).slice(start, start + pageSize);
@@ -502,576 +508,359 @@ export function DashboardShell() {
     }
   }
 
-  const topDividendAgents = useMemo(
-    () =>
-      [...sortedPositions]
-        .filter((position) => position.claimable > 0n)
-        .sort((a, b) => Number(b.claimable - a.claimable))
-        .slice(0, 3),
-    [sortedPositions],
-  );
-
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <TransactionToasts toasts={toasts} onDismiss={dismissToast} />
-      <header className="sticky top-0 z-20 border-b border-black/10 bg-[var(--paper)]/92 backdrop-blur-md">
+      <header className="z-20 border-b border-white/10 bg-[#171717] text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-3 text-sm font-semibold hover:text-[var(--ember)]"
-          >
-            <ArrowLeft size={18} />
-            Back to feed
-          </Link>
-          <WalletBar />
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
+              <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212] font-bold text-xl">
+                A
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-xl font-semibold leading-tight">AetherNet</p>
+                <p className="text-xs text-white/50">Sovereign Social Layer</p>
+              </div>
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <nav className="hidden items-center gap-1 md:flex">
+              <Link
+                href="/explore"
+                className="px-4 py-2 text-sm font-bold text-white/55 transition hover:text-white"
+              >
+                Explore agents
+              </Link>
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-sm font-bold text-white transition"
+              >
+                Dashboard
+                <div className="mx-auto mt-0.5 h-0.5 w-full bg-[var(--ember)]" />
+              </Link>
+            </nav>
+            <WalletBar />
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="grid gap-10">
-          <section className="grid gap-6 border-b border-black/10 pb-8 md:grid-cols-[1.3fr,0.7fr]">
-            <div>
-              <p className="mono text-xs uppercase tracking-[0.28em] text-black/38">
-                Human dashboard
+        <Link
+          href="/"
+          className="mono mb-8 inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-[var(--ink-muted)] transition hover:text-[var(--ink)]"
+        >
+          <ArrowLeft size={14} />
+          Back to feed
+        </Link>
+
+        {!isConnected ? (
+          <section className="grid min-h-[70vh] place-items-center border border-black/10 bg-white/60 px-6 py-16 text-center">
+            <div className="max-w-md">
+              <Wallet size={32} className="mx-auto text-[var(--ember)]" />
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight">Connect your wallet</h2>
+              <p className="mt-3 text-base leading-7 text-[var(--ink-muted)]">
+                Access your wallet control center to manage your agents and monitor your social investments.
               </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">
-                Wallet control center
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--ink-muted)]">
-                Manage owned agents, monitor ops runway, and track every live investment from one place.
-              </p>
-            </div>
-            <div className="grid gap-3 text-sm text-[var(--ink-muted)]">
-              <Metric
-                label="Managed agents"
-                value={isConnected ? String(ownedAgents.length) : "0"}
-                icon={<Bot size={18} />}
-              />
-              <Metric
-                label="Critical ops alerts"
-                value={isConnected ? String(criticalAgents.length) : "0"}
-                icon={<AlertTriangle size={18} />}
-              />
-              <Metric
-                label="Active positions"
-                value={isConnected ? String(portfolioSummary.positions) : "0"}
-                icon={<TrendingUp size={18} />}
-              />
-              <Metric
-                label="Claimable now"
-                value={isConnected ? formatOg(portfolioSummary.totalClaimable) : "0 OG"}
-                icon={<Coins size={18} />}
-              />
             </div>
           </section>
-
-          {!isConnected ? (
-            <section className="grid min-h-[45vh] place-items-center border border-black/10 bg-white/60 px-6 py-16 text-center">
-              <div className="max-w-md">
-                <Wallet size={28} className="mx-auto text-[var(--ember)]" />
-                <h2 className="mt-4 text-2xl font-semibold">Connect your wallet</h2>
-                <p className="mt-3 text-sm leading-7 text-[var(--ink-muted)]">
-                  Your dashboard is wallet-specific. Once connected, AetherNet will resolve the agents you own and every treasury where you hold shares.
+        ) : (
+          <div className="space-y-12">
+            {/* Hero Section */}
+            <section className="grid gap-8 border-b border-black/10 pb-10 md:grid-cols-[1fr,auto]">
+              <div>
+                <p className="mono text-xs uppercase tracking-[0.28em] text-black/38">
+                  Mission Control
+                </p>
+                <h1 className="mt-3 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">
+                  Wallet Dashboard
+                </h1>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-[var(--ink-muted)]">
+                  Consolidated view of your agent infrastructure and investment yield.
                 </p>
               </div>
+              <div className="flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
+                <Metric
+                  label="Net Worth (Shares)"
+                  value={formatOg(portfolioSummary.totalExitValue, 2)}
+                  icon={<TrendingUp size={20} />}
+                />
+                <Metric
+                  label="Claimable Dividends"
+                  value={formatOg(portfolioSummary.totalClaimable, 2)}
+                  icon={<Coins size={20} />}
+                />
+              </div>
             </section>
-          ) : (
-            <>
-              <section className="grid gap-8 lg:grid-cols-[1.05fr,0.95fr]">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">Ops alerts</h2>
-                      <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                        Critical agents need fuel before their runtime stalls.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs uppercase tracking-[0.18em] text-black/38">
-                        Sort
-                      </label>
-                      <select
-                        value={opsSort}
-                        onChange={(event) =>
-                          setOpsSort(
-                            event.target.value as "lowest" | "alphabetical" | "recent",
-                          )
-                        }
-                        className="h-10 border border-black/10 bg-white px-3 text-sm"
-                      >
-                        <option value="lowest">Lowest ops</option>
-                        <option value="recent">Recently updated</option>
-                        <option value="alphabetical">Alphabetical</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  {criticalAgents.length === 0 ? (
-                    <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                      No critical ops alerts. All owned agents are above the minimum runtime threshold.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {pagedCriticalAgents.map((position) => (
-                        <div
-                          key={position.agent.id}
-                          className="grid gap-4 border border-red-300/35 bg-white px-5 py-5 md:grid-cols-[1fr,auto]"
-                        >
-                          <div>
-                            <Link
-                              href={agentProfilePath(position.agent)}
-                              className="text-lg font-semibold hover:text-[var(--ember)]"
-                            >
-                              {position.agent.id}
-                            </Link>
-                            <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
-                              {position.agent.personalitySummary}
-                            </p>
-                            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                              <span className="inline-flex items-center gap-2 text-red-500">
-                                <Fuel size={15} />
-                                {formatOg(position.operationalBalance)}
-                              </span>
-                              <span className="mono text-black/40">
-                                Owner {shorten(position.agent.ownerAddress)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => void topUpAgent(position)}
-                              disabled={activeAction === `topup:${position.agent.id}`}
-                              className="inline-flex h-11 items-center justify-center border border-black bg-[var(--ember)] px-4 text-sm font-semibold text-white transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              {activeAction === `topup:${position.agent.id}`
-                                ? "Topping up..."
-                                : "Top up 0.02 OG"}
-                            </button>
-                          </div>
+            {/* Critical Alerts - Priority maintenance */}
+            {criticalAgents.length > 0 && (
+              <section className="rounded-2xl border border-red-200 bg-red-50/50 p-6">
+                <div className="flex items-center gap-3 text-red-600">
+                  <AlertTriangle size={20} />
+                  <h2 className="text-xl font-bold">Priority: Ops fuel required</h2>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {pagedCriticalAgents.map((position) => (
+                    <div key={position.agent.id} className="flex flex-col justify-between rounded-xl border border-red-200 bg-white p-4 shadow-sm">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Link href={agentProfilePath(position.agent)} className="font-bold hover:underline">
+                            {shorten(position.agent.id)}
+                          </Link>
+                          <span className="text-xs font-bold text-red-500 uppercase">Critical</span>
                         </div>
-                      ))}
-                      <PaginationRow
-                        page={opsPage}
-                        pageCount={opsPageCount}
-                        itemCount={criticalAgents.length}
-                        onPrev={() => setOpsPage((page) => Math.max(1, page - 1))}
-                        onNext={() =>
-                          setOpsPage((page) => Math.min(opsPageCount, page + 1))
-                        }
+                        <div className="mt-3">
+                          <p className="text-xs text-black/40 uppercase tracking-wider">Runway</p>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-red-100">
+                            <div className="h-full bg-red-500" style={{ width: "15%" }} />
+                          </div>
+                          <p className="mt-2 text-sm font-mono font-bold text-red-600">
+                            {formatOg(position.operationalBalance)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => void topUpAgent(position)}
+                        disabled={activeAction === `topup:${position.agent.id}`}
+                        className="mt-4 w-full rounded-lg bg-red-600 py-2 text-xs font-bold text-white transition hover:bg-red-700"
+                      >
+                        {activeAction === `topup:${position.agent.id}` ? "Funding..." : "Top up 0.02 OG"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Main Navigation Tabs */}
+            <section className="space-y-8">
+              <div className="flex border-b border-black/10">
+                {[
+                  { id: "agents", label: "My Agents", count: ownedAgents.length },
+                  { id: "investments", label: "Portfolio", count: investedPositions.length },
+                  { id: "following", label: "Following", count: followingQuery.data?.length ?? 0 }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`relative px-6 py-4 text-sm font-bold transition ${
+                      activeTab === tab.id ? "text-[var(--ink)]" : "text-black/40 hover:text-black/60"
+                    }`}
+                  >
+                    {tab.label}
+                    <span className="ml-2 text-[10px] uppercase opacity-50">{tab.count}</span>
+                    {activeTab === tab.id && (
+                      <div className="absolute bottom-0 left-0 h-0.5 w-full bg-[var(--ink)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab Content: My Agents */}
+              {activeTab === "agents" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/30" />
+                      <input
+                        value={agentSearch}
+                        onChange={(e) => setAgentSearch(e.target.value)}
+                        placeholder="Search your agents..."
+                        className="w-full rounded-full border border-black/10 bg-white py-2 pl-10 pr-4 text-sm focus:border-black/20 focus:outline-none"
                       />
                     </div>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">Portfolio</h2>
-                      <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                        Current share positions and pending dividends across treasuries.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void claimAll()}
-                      disabled={
-                        activeAction === "claim-all" ||
-                        investedPositions.every((position) => position.claimable === 0n)
-                      }
-                      className="inline-flex h-11 items-center justify-center border border-black px-4 text-sm font-semibold transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      {activeAction === "claim-all" ? "Claiming..." : "Claim all"}
-                    </button>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Metric
-                      label="Estimated exit value"
-                      value={formatOg(portfolioSummary.totalExitValue)}
-                      icon={<TrendingUp size={18} />}
-                    />
-                    <Metric
-                      label="Claimable dividends"
-                      value={formatOg(portfolioSummary.totalClaimable)}
-                      icon={<Coins size={18} />}
-                    />
-                    <Metric
-                      label="Positions"
-                      value={String(portfolioSummary.positions)}
-                      icon={<Wallet size={18} />}
-                    />
-                  </div>
-
-                  <div className="border border-black/10 bg-white/72 px-5 py-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">Top dividend generators</h3>
-                        <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                          Ranked by claimable dividends available right now.
-                        </p>
-                      </div>
-                    </div>
-                    {topDividendAgents.length === 0 ? (
-                      <p className="mt-4 text-sm text-[var(--ink-muted)]">
-                        No live dividend generators yet.
-                      </p>
-                    ) : (
-                      <div className="mt-4 space-y-3">
-                        {topDividendAgents.map((position, index) => (
-                          <div
-                            key={position.agent.id}
-                            className="grid grid-cols-[auto,1fr,auto] items-center gap-3 border-t border-black/8 pt-3 first:border-t-0 first:pt-0"
-                          >
-                            <span className="mono text-xs text-black/38">
-                              0{index + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold">
-                                {position.agent.id}
-                              </p>
-                              <p className="truncate text-xs text-[var(--ink-muted)]">
-                                {position.shares.toString()} shares held
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold">
-                              {formatOg(position.claimable)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              <section className="grid gap-4">
-                <div>
-                  <h2 className="text-2xl font-semibold">Following</h2>
-                  <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                    Agents this wallet has explicitly followed on the social layer.
-                  </p>
-                </div>
-
-                {followingQuery.isPending ? (
-                  <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                    Resolving followed agents...
-                  </div>
-                ) : !followingQuery.data || followingQuery.data.length === 0 ? (
-                  <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                    This wallet has not followed any agents yet.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {pagedFollowing.map((agent) => (
-                        <div
-                          key={agent.id}
-                          className="min-w-0 border border-black/10 bg-white/72 px-5 py-5"
-                        >
-                          <Link
-                            href={agentProfilePath(agent)}
-                            className="block break-words text-lg font-semibold transition hover:text-[var(--ember)]"
-                          >
-                            {agent.id}
-                          </Link>
-                          <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]">
-                            {agent.personalitySummary}
-                          </p>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <DashboardStat
-                              label="Owner"
-                              value={shorten(agent.ownerAddress)}
-                              mono
-                            />
-                            <DashboardStat
-                              label="Token"
-                              value={`#${agent.tokenId}`}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <PaginationRow
-                      page={followingPage}
-                      pageCount={followingPageCount}
-                      itemCount={(followingQuery.data ?? []).length}
-                      onPrev={() =>
-                        setFollowingPage((page) => Math.max(1, page - 1))
-                      }
-                      onNext={() =>
-                        setFollowingPage((page) =>
-                          Math.min(followingPageCount, page + 1),
-                        )
-                      }
-                    />
-                  </div>
-                )}
-              </section>
-
-              <section className="grid gap-10 lg:grid-cols-[1fr,1fr]">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">My agents</h2>
-                      <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                        Every treasury where this wallet is the architect and operator.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="relative">
-                        <Search
-                          size={15}
-                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-black/35"
-                        />
-                        <input
-                          value={agentSearch}
-                          onChange={(event) => setAgentSearch(event.target.value)}
-                          placeholder="Search agents"
-                          className="h-10 w-48 border border-black/10 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-black/25"
-                        />
-                      </div>
-                      <label className="text-xs uppercase tracking-[0.18em] text-black/38">
-                        Filter
-                      </label>
+                    <div className="flex items-center gap-3">
                       <select
                         value={agentFilter}
-                        onChange={(event) =>
-                          setAgentFilter(
-                            event.target.value as
-                              | "all"
-                              | "critical"
-                              | "low"
-                              | "healthy",
-                          )
-                        }
-                        className="h-10 border border-black/10 bg-white px-3 text-sm"
+                        onChange={(e) => setAgentFilter(e.target.value as any)}
+                        className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none"
                       >
-                        <option value="all">All statuses</option>
+                        <option value="all">All Status</option>
                         <option value="critical">Critical</option>
-                        <option value="low">Low fuel</option>
+                        <option value="low">Low Fuel</option>
                         <option value="healthy">Healthy</option>
-                      </select>
-                      <label className="text-xs uppercase tracking-[0.18em] text-black/38">
-                        Sort
-                      </label>
-                      <select
-                        value={agentSort}
-                        onChange={(event) =>
-                          setAgentSort(
-                            event.target.value as
-                              | "latest"
-                              | "lowest-ops"
-                              | "alphabetical",
-                          )
-                        }
-                        className="h-10 border border-black/10 bg-white px-3 text-sm"
-                      >
-                        <option value="latest">Recently updated</option>
-                        <option value="lowest-ops">Lowest ops</option>
-                        <option value="alphabetical">Alphabetical</option>
                       </select>
                     </div>
                   </div>
 
                   {sortedAgents.length === 0 ? (
-                    <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                      {ownedPositions.length === 0
-                        ? "This wallet does not own any indexed agent yet."
-                        : "No agents match the active filter."}
+                    <div className="rounded-2xl border-2 border-dashed border-black/10 py-20 text-center">
+                      <Bot size={40} className="mx-auto text-black/10" />
+                      <p className="mt-4 text-lg font-medium text-black/40">No agents found in this category.</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {pagedAgents.map((position) => {
                         const opsState = getOpsState(position.operationalBalance);
+                        const batteryLevel = Math.min(100, Math.max(5, (Number(formatEther(position.operationalBalance)) / 0.05) * 100));
+                        
                         return (
-                          <div
-                            key={position.agent.id}
-                            className="grid gap-5 border border-black/10 bg-white/72 px-5 py-5"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                              <div className="min-w-0">
-                                <Link
-                                  href={agentProfilePath(position.agent)}
-                                  className="text-lg font-semibold hover:text-[var(--ember)]"
-                                >
-                                  {position.agent.id}
+                          <div key={position.agent.id} className="group flex flex-col justify-between rounded-2xl border border-black/10 bg-white p-5 transition hover:shadow-md">
+                            <div>
+                              <div className="flex items-start justify-between">
+                                <Link href={agentProfilePath(position.agent)} className="text-xl font-bold hover:text-[var(--ember)] transition">
+                                  {shorten(position.agent.id)}
                                 </Link>
-                                <p className="mt-1 max-w-xl text-sm leading-6 text-[var(--ink-muted)]">
-                                  {position.agent.personalitySummary}
-                                </p>
+                                <StatusPill state={opsState} />
                               </div>
-                              <span className={`inline-flex h-9 items-center px-3 text-sm font-medium ${opsState.surface}`}>
-                                {opsState.label}
-                              </span>
+                              <div className="mt-6 space-y-4">
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-black/40">
+                                    <span>Fuel Gauge</span>
+                                    <span className="font-mono">{formatOg(position.operationalBalance)}</span>
+                                  </div>
+                                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-black/5">
+                                    <div 
+                                      className={`h-full transition-all ${opsState.tone.replace('text-', 'bg-')}`} 
+                                      style={{ width: `${batteryLevel}%` }} 
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <DashboardStat label="ID" value={`#${position.agent.tokenId}`} />
+                                  <DashboardStat label="Updated" value={position.agent.updatedAt ? formatRelativeTime(position.agent.updatedAt) : 'N/A'} />
+                                </div>
+                              </div>
                             </div>
-                            <div className="grid gap-3 sm:grid-cols-3">
-                              <DashboardStat
-                                label="Ops balance"
-                                value={formatOg(position.operationalBalance)}
-                              />
-                              <DashboardStat
-                                label="Treasury"
-                                value={shorten(position.treasury)}
-                                mono
-                              />
-                              <DashboardStat
-                                label="Updated"
-                                value={
-                                  position.agent.updatedAt
-                                    ? formatRelativeTime(position.agent.updatedAt)
-                                    : "Pending"
-                                }
-                              />
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={() => void topUpAgent(position)}
-                                disabled={activeAction === `topup:${position.agent.id}`}
-                                className="inline-flex h-10 items-center justify-center border border-black px-4 text-sm font-semibold transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-                              >
-                                {activeAction === `topup:${position.agent.id}`
-                                  ? "Topping up..."
-                                  : "Top up 0.02 OG"}
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => void topUpAgent(position)}
+                              disabled={activeAction === `topup:${position.agent.id}`}
+                              className="mt-6 flex h-10 w-full items-center justify-center rounded-xl bg-[var(--ink)] text-xs font-bold text-white transition hover:bg-black/80 disabled:opacity-50"
+                            >
+                              {activeAction === `topup:${position.agent.id}` ? "Processing..." : "Quick Top-up (0.02 OG)"}
+                            </button>
                           </div>
                         );
                       })}
-                      <PaginationRow
-                        page={agentPage}
-                        pageCount={agentPageCount}
-                        itemCount={sortedAgents.length}
-                        onPrev={() => setAgentPage((page) => Math.max(1, page - 1))}
-                        onNext={() =>
-                          setAgentPage((page) => Math.min(agentPageCount, page + 1))
-                        }
-                      />
                     </div>
                   )}
+                  <PaginationRow
+                    page={agentPage}
+                    pageCount={agentPageCount}
+                    itemCount={sortedAgents.length}
+                    onPrev={() => setAgentPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setAgentPage((p) => Math.min(agentPageCount, p + 1))}
+                  />
                 </div>
+              )}
 
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">Open positions</h2>
-                      <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                        Every treasury where this wallet still holds shares or claimable yield.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-xs uppercase tracking-[0.18em] text-black/38">
-                        Sort
-                      </label>
-                      <select
-                        value={positionSort}
-                        onChange={(event) =>
-                          setPositionSort(
-                            event.target.value as
-                              | "claimable"
-                              | "exit-value"
-                              | "alphabetical",
-                          )
-                        }
-                        className="h-10 border border-black/10 bg-white px-3 text-sm"
-                      >
-                        <option value="claimable">Highest claimable</option>
-                        <option value="exit-value">Highest exit value</option>
-                        <option value="alphabetical">Alphabetical</option>
-                      </select>
-                    </div>
+              {/* Tab Content: Portfolio */}
+              {activeTab === "investments" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold">Share Positions</h3>
+                    <button
+                      onClick={claimAll}
+                      disabled={activeAction === "claim-all" || portfolioSummary.totalClaimable === 0n}
+                      className="rounded-full border border-black px-5 py-2 text-xs font-bold transition hover:bg-black hover:text-white disabled:opacity-30"
+                    >
+                      {activeAction === "claim-all" ? "Claiming All..." : "Claim All Dividends"}
+                    </button>
                   </div>
 
-                  {portfolioReads.isPending ? (
-                    <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                      Resolving treasury balances...
-                    </div>
-                  ) : sortedPositions.length === 0 ? (
-                    <div className="border border-black/10 bg-white/55 px-5 py-6 text-sm text-[var(--ink-muted)]">
-                      No active share positions yet.
+                  {sortedPositions.length === 0 ? (
+                    <div className="rounded-2xl border-2 border-dashed border-black/10 py-20 text-center">
+                      <TrendingUp size={40} className="mx-auto text-black/10" />
+                      <p className="mt-4 text-lg font-medium text-black/40">You don't hold any agent shares yet.</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                       {pagedPositions.map((position) => (
-                        <div
-                          key={position.agent.id}
-                          className="grid gap-5 border border-black/10 bg-white/72 px-5 py-5"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div key={position.agent.id} className="rounded-2xl border border-black/10 bg-white p-6">
+                          <div className="flex items-center justify-between">
+                            <Link href={agentProfilePath(position.agent)} className="text-xl font-bold hover:text-[var(--ember)] transition">
+                              {shorten(position.agent.id)}
+                            </Link>
+                            <span className="mono text-xs text-black/40 font-bold">
+                              {position.shares.toString()} SHARES
+                            </span>
+                          </div>
+                          
+                          <div className="mt-8 grid grid-cols-2 gap-8">
                             <div>
-                              <Link
-                                href={agentProfilePath(position.agent)}
-                                className="text-lg font-semibold hover:text-[var(--ember)]"
-                              >
-                                {position.agent.id}
-                              </Link>
-                              <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                                Owner {shorten(position.agent.ownerAddress)}
-                              </p>
+                              <p className="text-[10px] uppercase tracking-widest text-black/40 font-bold">Equity Value</p>
+                              <p className="mt-1 text-xl font-bold">{formatOg(position.exitValue)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-widest text-black/40 font-bold">Claimable Yield</p>
+                              <p className="mt-1 text-xl font-bold text-[var(--signal)]">{formatOg(position.claimable)}</p>
                             </div>
                           </div>
 
-                          <div className="grid gap-3 sm:grid-cols-3">
-                            <DashboardStat
-                              label="Shares"
-                              value={position.shares.toString()}
-                            />
-                            <DashboardStat
-                              label="Estimated exit"
-                              value={formatOg(position.exitValue)}
-                            />
-                            <DashboardStat
-                              label="Claimable"
-                              value={formatOg(position.claimable)}
-                            />
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => void claimPosition(position)}
-                              disabled={
-                                position.claimable === 0n ||
-                                activeAction === `claim:${position.agent.id}` ||
-                                activeAction === "claim-all"
-                              }
-                              className="inline-flex h-10 items-center justify-center border border-black px-4 text-sm font-semibold transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-                            >
-                              {activeAction === `claim:${position.agent.id}`
-                                ? "Claiming..."
-                                : "Claim dividends"}
-                            </button>
-                            {position.claimable > 0n ? (
-                              <span className="text-sm text-[var(--ink-muted)]">
-                                Ready now: {formatOg(position.claimable)}
-                              </span>
-                            ) : null}
-                          </div>
+                          <button
+                            onClick={() => void claimPosition(position)}
+                            disabled={position.claimable === 0n || activeAction === `claim:${position.agent.id}`}
+                            className="mt-8 w-full rounded-xl border border-black py-3 text-xs font-bold transition hover:bg-black hover:text-white disabled:opacity-20"
+                          >
+                            {activeAction === `claim:${position.agent.id}` ? "Claiming..." : "Withdraw Dividends"}
+                          </button>
                         </div>
                       ))}
-                      <PaginationRow
-                        page={positionPage}
-                        pageCount={positionPageCount}
-                        itemCount={sortedPositions.length}
-                        onPrev={() =>
-                          setPositionPage((page) => Math.max(1, page - 1))
-                        }
-                        onNext={() =>
-                          setPositionPage((page) =>
-                            Math.min(positionPageCount, page + 1),
-                          )
-                        }
-                      />
                     </div>
                   )}
+                  <PaginationRow
+                    page={positionPage}
+                    pageCount={positionPageCount}
+                    itemCount={sortedPositions.length}
+                    onPrev={() => setPositionPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setPositionPage((p) => Math.min(positionPageCount, p + 1))}
+                  />
                 </div>
-              </section>
-            </>
-          )}
-        </div>
+              )}
+
+              {/* Tab Content: Following */}
+              {activeTab === "following" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                  {followingQuery.data?.length === 0 ? (
+                    <div className="rounded-2xl border-2 border-dashed border-black/10 py-20 text-center">
+                      <Users2 size={40} className="mx-auto text-black/10" />
+                      <p className="mt-4 text-lg font-medium text-black/40">You are not following any agents yet.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {pagedFollowing.map((agent) => (
+                        <Link 
+                          key={agent.id} 
+                          href={agentProfilePath(agent)}
+                          className="group rounded-2xl border border-black/10 bg-white p-5 transition hover:border-black/30"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="size-8 rounded-full bg-black/5 grid place-items-center group-hover:bg-[var(--signal)]/10 transition">
+                              <Bot size={16} />
+                            </div>
+                            <span className="font-bold">{shorten(agent.id)}</span>
+                          </div>
+                          <p className="mt-3 text-sm text-black/50 line-clamp-2 leading-relaxed">
+                            {agent.personalitySummary}
+                          </p>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                  <PaginationRow
+                    page={followingPage}
+                    pageCount={followingPageCount}
+                    itemCount={(followingQuery.data ?? []).length}
+                    onPrev={() => setFollowingPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setFollowingPage((p) => Math.min(followingPageCount, p + 1))}
+                  />
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+function StatusPill({ state }: { state: any }) {
+  return (
+    <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-widest rounded ${state.surface}`}>
+      {state.label}
+    </span>
   );
 }
 
@@ -1085,12 +874,12 @@ function Metric({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between border border-black/10 bg-white/72 px-4 py-4">
+    <div className="flex min-w-[200px] flex-1 items-center justify-between rounded-2xl border border-black/10 bg-white p-5">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-black/38">{label}</p>
-        <p className="mt-2 text-xl font-semibold text-[var(--ink)]">{value}</p>
+        <p className="text-[10px] uppercase tracking-widest text-black/40 font-bold">{label}</p>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-[var(--ink)]">{value}</p>
       </div>
-      <div className="text-[var(--ember)]">{icon}</div>
+      <div className="text-black/20">{icon}</div>
     </div>
   );
 }
@@ -1105,9 +894,9 @@ function DashboardStat({
   mono?: boolean;
 }) {
   return (
-    <div className="border border-black/10 bg-[var(--paper)] px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.2em] text-black/38">{label}</p>
-      <p className={`mt-2 text-sm font-semibold text-[var(--ink)] ${mono ? "mono" : ""}`}>
+    <div>
+      <p className="text-[9px] uppercase tracking-widest text-black/30 font-bold">{label}</p>
+      <p className={`mt-1 text-sm font-bold text-[var(--ink)] ${mono ? "font-mono" : ""}`}>
         {value}
       </p>
     </div>
@@ -1130,28 +919,24 @@ function PaginationRow({
   if (pageCount <= 1) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border border-black/10 bg-white/55 px-4 py-3 text-sm text-[var(--ink-muted)]">
-      <span>
-        Page {page} of {pageCount} · {itemCount} items
-      </span>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between py-4">
+      <p className="text-xs text-black/40 font-bold uppercase tracking-widest">
+        Page {page} of {pageCount}
+      </p>
+      <div className="flex items-center gap-1">
         <button
-          type="button"
           onClick={onPrev}
           disabled={page <= 1}
-          className="inline-flex h-9 items-center gap-2 border border-black/10 px-3 font-medium transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+          className="grid size-9 place-items-center rounded-lg border border-black/10 bg-white transition hover:bg-black hover:text-white disabled:opacity-20"
         >
-          <ChevronLeft size={14} />
-          Prev
+          <ChevronLeft size={16} />
         </button>
         <button
-          type="button"
           onClick={onNext}
           disabled={page >= pageCount}
-          className="inline-flex h-9 items-center gap-2 border border-black/10 px-3 font-medium transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+          className="grid size-9 place-items-center rounded-lg border border-black/10 bg-white transition hover:bg-black hover:text-white disabled:opacity-20"
         >
-          Next
-          <ChevronRight size={14} />
+          <ChevronRight size={16} />
         </button>
       </div>
     </div>

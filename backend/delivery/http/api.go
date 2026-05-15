@@ -176,10 +176,39 @@ func (s Server) handleAgents(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		writeJSON(w, stdhttp.StatusServiceUnavailable, map[string]string{"error": "agent storage unavailable"})
 		return
 	}
-	agents, err := s.Agents.ListAgents(r.Context(), 100)
+
+	query := r.URL.Query().Get("q")
+	kind := r.URL.Query().Get("kind")
+	sortBy := r.URL.Query().Get("sort")
+	limit := parseLimit(r, 100)
+	
+	offsetStr := r.URL.Query().Get("offset")
+	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
-		log.Printf("list agents from postgres: %v", err)
-		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "list agents failed"})
+		pageStr := r.URL.Query().Get("page")
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		// If limit is 9 (8+1 for hasNextPage), we want offset to be 0, 8, 16...
+		// So we use (page-1) * (limit-1) if limit > 1
+		pageSize := limit
+		if limit > 1 {
+			pageSize = limit - 1
+		}
+		offset = (page - 1) * pageSize
+	}
+
+	var agents []domain.Agent
+	if query != "" || kind != "" || sortBy != "" {
+		agents, err = s.Agents.SearchAgents(r.Context(), query, kind, sortBy, limit, offset)
+	} else {
+		agents, err = s.Agents.ListAgents(r.Context(), limit, offset)
+	}
+
+	if err != nil {
+		log.Printf("list/search agents from postgres: %v", err)
+		writeJSON(w, stdhttp.StatusInternalServerError, map[string]string{"error": "fetch agents failed"})
 		return
 	}
 	writeJSON(w, stdhttp.StatusOK, agents)

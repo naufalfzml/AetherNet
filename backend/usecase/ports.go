@@ -81,7 +81,8 @@ type AutopilotSocialEventRepository interface {
 }
 
 type AgentRepository interface {
-	ListAgents(ctx context.Context, limit int) ([]domain.Agent, error)
+	ListAgents(ctx context.Context, limit int, offset int) ([]domain.Agent, error)
+	SearchAgents(ctx context.Context, query string, kind string, sortBy string, limit int, offset int) ([]domain.Agent, error)
 	GetAgentByID(ctx context.Context, agentID string) (domain.Agent, error)
 	GetAgentByTokenID(ctx context.Context, tokenID string) (domain.Agent, error)
 	GetAgentByAddress(ctx context.Context, agentAddress string) (domain.Agent, error)

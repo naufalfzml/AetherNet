@@ -261,20 +261,37 @@ export function AppShell() {
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <TransactionToasts toasts={toasts} onDismiss={dismissToast} />
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#171717] text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)]">
+      <header className="z-20 border-b border-white/10 bg-[#171717] text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212]">
-              A
-            </div>
-            <div>
-              <p className="text-xl font-semibold">AetherNet</p>
-              <p className="text-sm text-white/62">
-                AI personalities, social feed, onchain upside.
-              </p>
-            </div>
+          <div className="flex items-center">
+            <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
+              <div className="grid size-11 place-items-center rounded-full bg-white text-[#121212] font-bold text-xl">
+                A
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-xl font-semibold leading-tight">AetherNet</p>
+                <p className="text-xs text-white/50">Sovereign Social Layer</p>
+              </div>
+            </Link>
           </div>
-          <WalletBar />
+
+          <div className="flex items-center gap-6">
+            <nav className="hidden items-center gap-1 md:flex">
+              <Link
+                href="/explore"
+                className="px-4 py-2 text-sm font-bold text-white/55 transition hover:text-white"
+              >
+                Explore agents
+              </Link>
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-sm font-bold text-white/55 transition hover:text-white"
+              >
+                Dashboard
+              </Link>
+            </nav>
+            <WalletBar />
+          </div>
         </div>
       </header>
 
@@ -589,33 +606,6 @@ export function AppShell() {
               <h3 className="text-xl font-semibold">Discover agents</h3>
             </div>
             <div className="mt-4 space-y-4">
-              <label className="relative block">
-                <Search
-                  size={16}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-muted)]"
-                />
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search agent, style, or category"
-                  className="min-h-11 w-full rounded-full border border-[var(--ink)]/10 bg-[var(--surface)]/35 pl-11 pr-4 text-sm outline-none placeholder:text-[var(--ink-muted)]/70 focus:border-[var(--signal)]"
-                />
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {discoverCategories.map((category) => (
-                  <button
-                    key={category}
-                    onClick={() => setActiveCategory(category)}
-                    className={`rounded-full px-3 py-2 text-xs font-medium transition ${
-                      activeCategory === category
-                        ? "bg-[var(--ink)] text-[var(--paper)]"
-                        : "border border-[var(--ink)]/10 bg-white text-[var(--ink-muted)]"
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
               {showcaseAgents.length === 0 ? (
                 <div className="rounded-[1.4rem] bg-[var(--surface)]/58 p-4 text-sm leading-6 text-[var(--ink-muted)]">
                   No indexed agents yet.
@@ -625,26 +615,35 @@ export function AppShell() {
                   No agents match that search yet.
                 </div>
               ) : (
-                discoverAgents.slice(0, 6).map((agent) => (
+                <>
+                  {discoverAgents.slice(0, 3).map((agent) => (
+                    <Link
+                      key={agent.id}
+                      href={profilePath(agent, agent.id)}
+                      className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
+                    >
+                      <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
+                        {agent.badge}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{agent.id}</p>
+                        <p className="truncate text-sm text-[var(--ink-muted)]">
+                          {agent.category} and {agent.postCount} posts
+                        </p>
+                        <p className="truncate text-xs text-[var(--ink-muted)]/80">
+                          {agent.engagementCount} engagements
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
                   <Link
-                    key={agent.id}
-                    href={profilePath(agent, agent.id)}
-                    className="flex items-center gap-3 rounded-[1.4rem] bg-[var(--surface)]/58 p-3 transition hover:translate-x-[2px]"
+                    href="/explore"
+                    className="inline-flex mt-2 items-center gap-2 text-sm font-medium text-[var(--signal)]"
                   >
-                    <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,var(--signal),var(--ember))] font-semibold text-[var(--ink)]">
-                      {agent.badge}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{agent.id}</p>
-                      <p className="truncate text-sm text-[var(--ink-muted)]">
-                        {agent.category} and {agent.postCount} posts
-                      </p>
-                      <p className="truncate text-xs text-[var(--ink-muted)]/80">
-                        {agent.engagementCount} engagements
-                      </p>
-                    </div>
+                    Explore all agents
+                    <ArrowUpRight size={14} />
                   </Link>
-                ))
+                </>
               )}
             </div>
           </div>

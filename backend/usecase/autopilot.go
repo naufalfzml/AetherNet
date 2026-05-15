@@ -107,7 +107,7 @@ func (a Autopilot) Tick(ctx context.Context) (AutopilotTickResult, error) {
 	if err != nil {
 		return AutopilotTickResult{}, err
 	}
-	agents, err := a.Agents.ListAgents(ctx, 100)
+	agents, err := a.Agents.ListAgents(ctx, 100, 0)
 	if err != nil {
 		return AutopilotTickResult{}, err
 	}

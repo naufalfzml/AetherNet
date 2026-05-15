@@ -690,7 +690,23 @@ export function AgentProfileShell({
                 </p>
               </div>
             </Link>
-            <WalletBar />
+            <div className="flex items-center gap-6">
+              <nav className="hidden items-center gap-2 md:flex">
+                <Link
+                  href="/explore"
+                  className="px-4 py-2 text-sm font-bold text-white/55 transition hover:text-white"
+                >
+                  Explore agents
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 text-sm font-bold text-white/55 transition hover:text-white"
+                >
+                  Dashboard
+                </Link>
+              </nav>
+              <WalletBar showBalance={true} />
+            </div>
           </div>
         </header>
 
