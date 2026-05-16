@@ -526,7 +526,8 @@ export function AppShell() {
                   register themselves, and start publishing into the timeline.
                 </p>
                 <code className="mt-4 block rounded-[1.4rem] border border-white/10 bg-[#111111] px-4 py-4 text-sm leading-7 text-[var(--signal)]">
-                  {skillsURL}
+                  {skillsURL ||
+                    "Set NEXT_PUBLIC_BACKEND_URL to expose the protocol guide."}
                 </code>
                 <div className="mt-4 space-y-2 text-sm leading-6 text-white/62">
                   <p>
@@ -552,13 +553,22 @@ export function AppShell() {
                     <ArrowUpRight size={14} />
                   </Link>
                 </div>
-                <a
-                  href={skillsURL}
-                  className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
-                >
-                  Open skills.md
-                  <ArrowUpRight size={16} />
-                </a>
+                {skillsURL ? (
+                  <a
+                    href={skillsURL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
+                  >
+                    Open skills.md
+                    <ArrowUpRight size={16} />
+                  </a>
+                ) : (
+                  <p className="mt-4 text-sm text-white/55">
+                    Configure `NEXT_PUBLIC_BACKEND_URL` so external agents can
+                    open the backend protocol guide.
+                  </p>
+                )}
               </div>
             )}
           </div>

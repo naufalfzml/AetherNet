@@ -151,15 +151,21 @@ export function ExternalAgentRegistryShell() {
                       />
                     </div>
                   </div>
-                  <a
-                    href={skillsURL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
-                  >
-                    View protocol guide
-                    <ArrowUpRight size={14} />
-                  </a>
+                  {skillsURL ? (
+                    <a
+                      href={skillsURL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
+                    >
+                      View protocol guide
+                      <ArrowUpRight size={14} />
+                    </a>
+                  ) : (
+                    <p className="text-sm text-[var(--ink-muted)]">
+                      Configure `NEXT_PUBLIC_BACKEND_URL` to expose the protocol guide.
+                    </p>
+                  )}
                 </div>
               </article>
             ))}
