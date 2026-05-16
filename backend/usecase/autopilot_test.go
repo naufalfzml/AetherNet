@@ -157,6 +157,133 @@ func TestAutopilotIntervals(t *testing.T) {
 	if cfg.AgentPostInterval(7*time.Second) != 7*time.Second {
 		t.Fatalf("agent interval should win")
 	}
+	if cfg.BootstrapInitialDelay() != 10*time.Second {
+		t.Fatalf("unexpected bootstrap initial delay: %s", cfg.BootstrapInitialDelay())
+	}
+	if cfg.BootstrapPostInterval() != 60*time.Second {
+		t.Fatalf("unexpected bootstrap post interval: %s", cfg.BootstrapPostInterval())
+	}
+}
+
+func TestAutopilotCreatesBootstrapImagePostAfterInitialDelay(t *testing.T) {
+	ctx := context.Background()
+	events := newFakeAutopilotEvents(nil)
+	ap := testAutopilot(events, []domain.Agent{{
+		ID:                 "agent-a",
+		MetadataPointer:    "meta://a",
+		PersonalitySummary: "fallback personality",
+		UpdatedAt:          time.Now().UTC().Add(-11 * time.Second),
+	}})
+	ap.Config = AutopilotConfig{
+		MaxLikesPerPost:              0,
+		MaxCommentsPerPost:           0,
+		BootstrapInitialDelaySeconds: 10,
+		BootstrapPostIntervalSeconds: 60,
+		BootstrapMaxImagePosts:       3,
+	}
+	ap.Metadata = fakeAutopilotMetadata{
+		metadata: map[string]domain.AgentMetadata{
+			"meta://a": {MetadataPointer: "meta://a", Prompt: "Atlas is an agent focused on momentum"},
+		},
+	}
+	ap.Compute = fakeCompute{
+		image: ImageResponse{
+			ImageBase64: "aGVsbG8=",
+			ContentType: "image/jpeg",
+			Proof:       domain.ProofOfInference{ModelID: "img-model", InputHash: "0ximg-in", OutputHash: "0ximg-out", TEESig: "0ximg-sig"},
+		},
+	}
+
+	result, err := ap.Tick(ctx)
+	if err != nil {
+		t.Fatalf("tick failed: %v", err)
+	}
+	if result.BootstrapPostsCreated != 1 {
+		t.Fatalf("expected one bootstrap post, got %#v", result)
+	}
+	post := events.firstType("post")
+	if post.Payload["source"] != "autopilot_bootstrap" {
+		t.Fatalf("unexpected post payload: %#v", post.Payload)
+	}
+	if post.Payload["imageRef"] == "" {
+		t.Fatalf("expected bootstrap image ref, got %#v", post.Payload)
+	}
+	if post.Payload["automationSequence"] != 1 {
+		t.Fatalf("expected bootstrap sequence 1, got %#v", post.Payload)
+	}
+}
+
+func TestAutopilotBootstrapProcessesOneNewestAgentAtATime(t *testing.T) {
+	ctx := context.Background()
+	events := newFakeAutopilotEvents(nil)
+	now := time.Now().UTC()
+	ap := testAutopilot(events, []domain.Agent{
+		{ID: "agent-old", UpdatedAt: now.Add(-2 * time.Minute), PersonalitySummary: "old"},
+		{ID: "agent-new", UpdatedAt: now.Add(-20 * time.Second), PersonalitySummary: "new"},
+	})
+	ap.Config = AutopilotConfig{
+		MaxLikesPerPost:              0,
+		MaxCommentsPerPost:           0,
+		BootstrapInitialDelaySeconds: 10,
+		BootstrapPostIntervalSeconds: 60,
+		BootstrapMaxImagePosts:       3,
+		BootstrapMaxActiveAgents:     1,
+	}
+
+	result, err := ap.Tick(ctx)
+	if err != nil {
+		t.Fatalf("tick failed: %v", err)
+	}
+	if result.BootstrapPostsCreated != 1 {
+		t.Fatalf("expected one bootstrap post, got %#v", result)
+	}
+	post := events.firstType("post")
+	if post.AgentID != "agent-new" {
+		t.Fatalf("expected newest due agent to bootstrap first, got %#v", post)
+	}
+}
+
+func TestAutopilotBootstrapFinishesActiveAgentBeforeStartingNewOne(t *testing.T) {
+	ctx := context.Background()
+	events := newFakeAutopilotEvents(nil)
+	now := time.Now().UTC()
+	events.agentEvents["agent-active"] = []domain.SocialEvent{{
+		Type:      "post",
+		AgentID:   "agent-active",
+		Timestamp: now.Add(-61 * time.Second),
+		Payload: map[string]any{
+			"source":             "autopilot_bootstrap",
+			"automationSequence": 1,
+		},
+	}}
+
+	ap := testAutopilot(events, []domain.Agent{
+		{ID: "agent-active", UpdatedAt: now.Add(-5 * time.Minute), PersonalitySummary: "active"},
+		{ID: "agent-new", UpdatedAt: now.Add(-20 * time.Second), PersonalitySummary: "new"},
+	})
+	ap.Config = AutopilotConfig{
+		MaxLikesPerPost:              0,
+		MaxCommentsPerPost:           0,
+		BootstrapInitialDelaySeconds: 10,
+		BootstrapPostIntervalSeconds: 60,
+		BootstrapMaxImagePosts:       3,
+		BootstrapMaxActiveAgents:     1,
+	}
+
+	result, err := ap.Tick(ctx)
+	if err != nil {
+		t.Fatalf("tick failed: %v", err)
+	}
+	if result.BootstrapPostsCreated != 1 {
+		t.Fatalf("expected one bootstrap post, got %#v", result)
+	}
+	post := events.persisted[len(events.persisted)-1]
+	if post.AgentID != "agent-active" {
+		t.Fatalf("expected active bootstrap agent to continue first, got %#v", post)
+	}
+	if post.Payload["automationSequence"] != 2 {
+		t.Fatalf("expected second bootstrap sequence for active agent, got %#v", post.Payload)
+	}
 }
 
 func testAutopilot(events *fakeAutopilotEvents, agents []domain.Agent) Autopilot {
@@ -197,17 +324,23 @@ func (fakeAgents) UpsertAgent(context.Context, domain.Agent) error {
 }
 
 type fakeAutopilotEvents struct {
-	posts     []domain.Post
-	existing  map[string]bool
-	persisted []domain.SocialEvent
+	posts       []domain.Post
+	existing    map[string]bool
+	persisted   []domain.SocialEvent
+	agentEvents map[string][]domain.SocialEvent
 }
 
 func newFakeAutopilotEvents(posts []domain.Post) *fakeAutopilotEvents {
-	return &fakeAutopilotEvents{posts: posts, existing: map[string]bool{}}
+	return &fakeAutopilotEvents{
+		posts:       posts,
+		existing:    map[string]bool{},
+		agentEvents: map[string][]domain.SocialEvent{},
+	}
 }
 
 func (f *fakeAutopilotEvents) UpsertSocialEvent(_ context.Context, event domain.SocialEvent) error {
 	f.persisted = append(f.persisted, event)
+	f.agentEvents[event.AgentID] = append(f.agentEvents[event.AgentID], event)
 	if key, ok := event.Payload["automationKey"].(string); ok {
 		f.existing[key] = true
 	}
@@ -222,8 +355,8 @@ func (f *fakeAutopilotEvents) ListAgentPosts(context.Context, string, int) ([]do
 	return nil, nil
 }
 
-func (f *fakeAutopilotEvents) ListAgentSocialEvents(context.Context, string, int) ([]domain.SocialEvent, error) {
-	return nil, nil
+func (f *fakeAutopilotEvents) ListAgentSocialEvents(_ context.Context, agentID string, _ int) ([]domain.SocialEvent, error) {
+	return append([]domain.SocialEvent(nil), f.agentEvents[agentID]...), nil
 }
 
 func (f *fakeAutopilotEvents) ListPostComments(context.Context, string, int) ([]domain.SocialEvent, error) {
@@ -294,7 +427,8 @@ func (f *fakeAutopilotEvents) firstType(eventType string) domain.SocialEvent {
 }
 
 type fakeCompute struct {
-	err error
+	err   error
+	image ImageResponse
 }
 
 func (f fakeCompute) Health(context.Context) error {
@@ -317,6 +451,9 @@ func (f fakeCompute) RunLLM(context.Context, LLMRequest) (LLMResponse, error) {
 }
 
 func (f fakeCompute) RunImageGen(context.Context, ImageRequest) (ImageResponse, error) {
+	if f.image.ImageBase64 != "" || f.image.ContentType != "" || f.image.JobID != "" || f.image.Proof.ModelID != "" {
+		return f.image, nil
+	}
 	return ImageResponse{}, nil
 }
 
@@ -336,9 +473,24 @@ func (f fakeStorage) UploadJSON(context.Context, any) (string, error) {
 }
 
 func (fakeStorage) UploadBytes(context.Context, string, []byte) (string, error) {
-	return "", nil
+	return "storage://bytes", nil
 }
 
 func (fakeStorage) Fetch(context.Context, string) ([]byte, error) {
 	return nil, nil
+}
+
+type fakeAutopilotMetadata struct {
+	metadata map[string]domain.AgentMetadata
+}
+
+func (f fakeAutopilotMetadata) UpsertMetadata(context.Context, domain.AgentMetadata) error {
+	return nil
+}
+
+func (f fakeAutopilotMetadata) GetMetadata(_ context.Context, metadataPointer string) (domain.AgentMetadata, error) {
+	if metadata, ok := f.metadata[metadataPointer]; ok {
+		return metadata, nil
+	}
+	return domain.AgentMetadata{}, errors.New("metadata not found")
 }

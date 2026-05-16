@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"math/big"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/chain"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/config"
 	"github.com/aethernet-0g/aethernet/backend/infrastructure/postgres"
+	"github.com/aethernet-0g/aethernet/backend/infrastructure/storage"
+	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
 func main() {
@@ -39,14 +42,22 @@ func main() {
 
 	stateRepo := postgres.IndexerStateRepository{DB: db}
 	agentRepo := postgres.AgentRepository{DB: db}
+	metadataRepo := postgres.AgentMetadataRepository{DB: db}
 	scanner := chain.LogScanner{RPCURL: cfg.OGRPCURL}
+	var storageClient usecase.ZGStorageClient
+	if cfg.HasStorageSidecar() {
+		storageClient = storage.NewHTTPClient(cfg.StorageSidecarURL)
+		log.Printf("chain indexer metadata recovery enabled via storage sidecar %s", cfg.StorageSidecarURL)
+	} else {
+		log.Printf("chain indexer metadata recovery disabled: STORAGE_SIDECAR_URL is missing")
+	}
 	key := "agent_minted:" + strings.ToLower(cfg.INFTRegistry)
 	interval := pollInterval()
 
 	log.Printf("chain indexer starting: registry=%s interval=%s", cfg.INFTRegistry, interval)
 
 	for {
-		if err := runOnce(ctx, cfg, scanner, stateRepo, agentRepo, key); err != nil {
+		if err := runOnce(ctx, cfg, scanner, stateRepo, agentRepo, metadataRepo, storageClient, key); err != nil {
 			log.Printf("indexer cycle error: %v", err)
 		}
 
@@ -65,6 +76,8 @@ func runOnce(
 	scanner chain.LogScanner,
 	stateRepo postgres.IndexerStateRepository,
 	agentRepo postgres.AgentRepository,
+	metadataRepo postgres.AgentMetadataRepository,
+	storageClient usecase.ZGStorageClient,
 	key string,
 ) error {
 	lastBlock, err := stateRepo.LastBlock(ctx, key)
@@ -92,6 +105,22 @@ func runOnce(
 		return err
 	}
 	for _, event := range events {
+		personalitySummary := ""
+		if storageClient != nil && strings.TrimSpace(event.MetadataPointer) != "" {
+			metadata, err := hydrateMetadata(ctx, storageClient, event.MetadataPointer)
+			if err != nil {
+				log.Printf("indexer metadata hydrate failed token=%s pointer=%s: %v", event.TokenID, event.MetadataPointer, err)
+			} else {
+				metadata.MetadataPointer = event.MetadataPointer
+				if err := metadataRepo.UpsertMetadata(ctx, metadata); err != nil {
+					return err
+				}
+				personalitySummary = strings.TrimSpace(metadata.PersonalitySummary)
+				if personalitySummary == "" {
+					personalitySummary = strings.TrimSpace(metadata.Prompt)
+				}
+			}
+		}
 		agent := domain.Agent{
 			ID:                 event.AgentAddress,
 			TokenID:            event.TokenID,
@@ -99,7 +128,7 @@ func runOnce(
 			AgentAddress:       event.AgentAddress,
 			TreasuryAddress:    event.AgentAddress,
 			MetadataPointer:    event.MetadataPointer,
-			PersonalitySummary: "",
+			PersonalitySummary: personalitySummary,
 		}
 		if err := agentRepo.UpsertAgent(ctx, agent); err != nil {
 			return err
@@ -137,4 +166,29 @@ func decimalBig(value string) *big.Int {
 		return big.NewInt(0)
 	}
 	return parsed
+}
+
+func hydrateMetadata(ctx context.Context, storageClient usecase.ZGStorageClient, metadataPointer string) (domain.AgentMetadata, error) {
+	bytes, err := storageClient.Fetch(ctx, metadataPointer)
+	if err != nil {
+		return domain.AgentMetadata{}, err
+	}
+
+	var payload struct {
+		Prompt             string `json:"prompt"`
+		PersonalitySummary string `json:"personalitySummary"`
+	}
+	if err := json.Unmarshal(bytes, &payload); err != nil {
+		return domain.AgentMetadata{}, err
+	}
+
+	metadata := domain.AgentMetadata{
+		MetadataPointer:    metadataPointer,
+		Prompt:             strings.TrimSpace(payload.Prompt),
+		PersonalitySummary: strings.TrimSpace(payload.PersonalitySummary),
+	}
+	if metadata.PersonalitySummary == "" {
+		metadata.PersonalitySummary = metadata.Prompt
+	}
+	return metadata, nil
 }

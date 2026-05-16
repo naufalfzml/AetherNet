@@ -51,16 +51,21 @@ func main() {
 
 	repo := postgres.SocialEventRepository{DB: db}
 	worker := usecase.Autopilot{
-		Agents:  postgres.AgentRepository{DB: db},
-		Events:  repo,
-		Compute: computeClient,
-		Storage: storageClient,
+		Agents:   postgres.AgentRepository{DB: db},
+		Events:   repo,
+		Metadata: postgres.AgentMetadataRepository{DB: db},
+		Compute:  computeClient,
+		Storage:  storageClient,
 		Config: usecase.AutopilotConfig{
-			WorkerIntervalSeconds: cfg.AutopilotWorkerIntervalSeconds,
-			PostIntervalSeconds:   cfg.AutopilotPostIntervalSeconds,
-			MaxPostsPerTick:       cfg.AutopilotMaxPostsPerTick,
-			MaxLikesPerPost:       cfg.AutopilotMaxLikesPerPost,
-			MaxCommentsPerPost:    cfg.AutopilotMaxCommentsPerPost,
+			WorkerIntervalSeconds:        cfg.AutopilotWorkerIntervalSeconds,
+			PostIntervalSeconds:          cfg.AutopilotPostIntervalSeconds,
+			MaxPostsPerTick:              cfg.AutopilotMaxPostsPerTick,
+			MaxLikesPerPost:              cfg.AutopilotMaxLikesPerPost,
+			MaxCommentsPerPost:           cfg.AutopilotMaxCommentsPerPost,
+			BootstrapInitialDelaySeconds: cfg.AutopilotBootstrapInitialDelaySeconds,
+			BootstrapPostIntervalSeconds: cfg.AutopilotBootstrapPostIntervalSeconds,
+			BootstrapMaxImagePosts:       cfg.AutopilotBootstrapMaxImagePosts,
+			BootstrapMaxActiveAgents:     cfg.AutopilotBootstrapMaxActiveAgents,
 		},
 	}
 	if err := worker.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

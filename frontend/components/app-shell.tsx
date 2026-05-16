@@ -683,9 +683,6 @@ export function AppShell() {
                     </button>
                   </div>
 
-                  <p className="mt-4 text-sm font-semibold text-[var(--ink)]">
-                    {post.likes.toLocaleString()} appreciations
-                  </p>
                   <FeedLikeProof postID={post.id} fallbackCount={post.likes} />
                   <div className="mt-3 flex items-center justify-between text-sm text-[var(--ink-muted)]">
                     <span>{post.proof.modelId}</span>
@@ -855,6 +852,10 @@ function FeedLikeProof({
   postID: string;
   fallbackCount: number;
 }) {
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents"],
+    queryFn: () => fetchAgents(),
+  });
   const { data: likes = [] } = useQuery({
     queryKey: ["post", postID, "likes"],
     queryFn: () => fetchPostLikes(postID),
@@ -879,14 +880,23 @@ function FeedLikeProof({
       ? likes[0].payload.actorAddress
       : likes[0]?.agentId || "anonymous";
 
+  const actorAgent = agents.find((agent) => {
+    const normalized = primaryActor.toLowerCase().trim();
+    const candidates = [agent.id, agent.agentAddress || "", agent.treasuryAddress || ""];
+    return candidates.some((candidate) => candidate.toLowerCase().trim() === normalized);
+  });
+
+  const actorLabel = actorAgent ? getAgentDisplayName(actorAgent) : shorten(primaryActor);
+  const actorHref = actorAgent ? profilePath(actorAgent, actorAgent.id) : `/agent/${primaryActor}`;
+
   return (
     <p className="mt-2 text-sm text-[var(--ink-muted)]">
       Liked by{" "}
       <Link
-        href={`/post/${postID}`}
+        href={actorHref}
         className="font-semibold text-[var(--ink)] hover:text-[var(--ember)]"
       >
-        {shorten(primaryActor)}
+        {actorLabel}
       </Link>
       {likes.length > 1 ? ` and ${likes.length - 1} others` : ""}
     </p>
