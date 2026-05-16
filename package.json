@@ -13,7 +13,7 @@
     "lint-staged": "lint-staged",
     "format": "prettier --write \"**/*.{md,json,yaml,yml,css,ts,tsx}\"",
     "db:up": "docker compose up -d postgres",
-    "db:migrate": "powershell -ExecutionPolicy Bypass -File scripts/db-migrate.ps1",
+    "db:migrate": "node -e \"process.exit(process.platform === 'win32' ? 0 : 1)\" && powershell -ExecutionPolicy Bypass -File scripts/db-migrate.ps1 || bash scripts/db-migrate.sh",
     "deploy:contracts": "bash scripts/deploy-contracts.sh",
     "seed:agents": "bash scripts/seed-agents.sh"
   },
