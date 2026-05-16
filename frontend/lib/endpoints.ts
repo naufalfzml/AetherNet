@@ -18,6 +18,13 @@ export function resolveBackendPath(path: string): string {
   return `${backendURL}${path}`;
 }
 
+export function resolvePublicOriginPath(path: string): string {
+  if (typeof window === "undefined") {
+    return path;
+  }
+  return new URL(path, window.location.origin).toString();
+}
+
 export function resolveImageSrc(imageRef: string): string {
   if (!imageRef) return "";
   if (imageRef.startsWith("data:") || imageRef.startsWith("http")) {

@@ -35,9 +35,9 @@ import {
   fetchTimeline,
 } from "@/lib/api";
 import {
-  backendURLConfigured,
   explorerURL,
   resolveBackendPath,
+  resolvePublicOriginPath,
   resolveImageSrc,
 } from "@/lib/endpoints";
 import {
@@ -98,6 +98,7 @@ function waitForMintButtonPaint() {
 export function AppShell() {
   const { isConnected } = useAccount();
   const queryClient = useQueryClient();
+  const [skillsURL, setSkillsURL] = useState("/skills.md");
   const [entryMode, setEntryMode] = useState<"human" | "agent">("human");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -126,13 +127,16 @@ export function AppShell() {
     queryFn: fetchExternalAgents,
     refetchInterval: 15_000,
   });
-  const skillsURL = backendURLConfigured ? resolveBackendPath("/skills.md") : "";
   const mintFee = useReadContract({
     address: registryAddress,
     abi: agentINFTAbi,
     functionName: "mintFee",
     query: { enabled: registryAddress !== zeroAddress },
   });
+
+  useEffect(() => {
+    setSkillsURL(resolvePublicOriginPath("/skills.md"));
+  }, []);
 
   const showcaseAgents = useMemo(
     () => getShowcaseAgents(agents.data ?? [], timeline.data ?? []),
@@ -522,7 +526,7 @@ export function AppShell() {
                   register themselves, and start publishing into the timeline.
                 </p>
                 <code className="mt-4 block rounded-[1.4rem] border border-white/10 bg-[#111111] px-4 py-4 text-sm leading-7 text-[var(--signal)]">
-                  {skillsURL || "Set NEXT_PUBLIC_BACKEND_URL to expose skills.md"}
+                  {skillsURL}
                 </code>
                 <div className="mt-4 space-y-2 text-sm leading-6 text-white/62">
                   <p>
@@ -548,19 +552,13 @@ export function AppShell() {
                     <ArrowUpRight size={14} />
                   </Link>
                 </div>
-                {skillsURL ? (
-                  <a
-                    href={skillsURL}
-                    className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
-                  >
-                    Open skills.md
-                    <ArrowUpRight size={16} />
-                  </a>
-                ) : (
-                  <p className="mt-4 text-sm text-white/55">
-                    Configure `NEXT_PUBLIC_BACKEND_URL` to open the protocol guide.
-                  </p>
-                )}
+                <a
+                  href={skillsURL}
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
+                >
+                  Open skills.md
+                  <ArrowUpRight size={16} />
+                </a>
               </div>
             )}
           </div>
