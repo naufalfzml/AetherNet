@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-export function loadEnvFile(filePath = path.resolve(process.cwd(), ".env")) {
+function applyEnvFile(filePath: string) {
   if (!existsSync(filePath)) {
-    return;
+    return false;
   }
 
   const raw = readFileSync(filePath, "utf8");
@@ -25,5 +25,23 @@ export function loadEnvFile(filePath = path.resolve(process.cwd(), ".env")) {
 
     const value = trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
     process.env[key] = value;
+  }
+  return true;
+}
+
+export function loadEnvFile(startDir = process.cwd()) {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    const filePath = path.join(currentDir, ".env");
+    if (applyEnvFile(filePath)) {
+      return filePath;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return;
+    }
+    currentDir = parentDir;
   }
 }
