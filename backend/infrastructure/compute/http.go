@@ -103,7 +103,7 @@ func (c HTTPClient) imageClient() *http.Client {
 	if c.Client != nil {
 		return c.Client
 	}
-	return &http.Client{Timeout: 120 * time.Second}
+	return &http.Client{Timeout: 300 * time.Second}
 }
 
 func (c HTTPClient) client() *http.Client {

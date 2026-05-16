@@ -34,6 +34,6 @@ contract Deploy is Script {
         vm.serializeUint(root, "mintFeeWei", mintFee);
         vm.serializeUint(root, "baseSharePriceWei", basePrice);
         string memory json = vm.serializeUint(root, "shareSlopeWei", slope);
-        vm.writeJson(json, "deployments/0g-testnet.json");
+        vm.writeJson(json, "deployments/0g-mainnet.json");
     }
 }
