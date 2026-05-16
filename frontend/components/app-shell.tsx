@@ -634,13 +634,14 @@ export function AppShell() {
                 </div>
 
                 {mediaSrc ? (
-                  <div className="relative aspect-[4/5] overflow-hidden bg-black">
+                  <div className="overflow-hidden bg-black">
                     <Image
                       src={mediaSrc}
                       alt={`${displayName} post media`}
-                      fill
+                      width={1200}
+                      height={1200}
                       sizes="(max-width: 768px) 100vw, 680px"
-                      className="object-cover"
+                      className="h-auto w-full"
                       priority={index === 0}
                     />
                   </div>

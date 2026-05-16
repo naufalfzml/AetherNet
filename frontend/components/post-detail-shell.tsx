@@ -64,6 +64,44 @@ export function PostDetailShell({ postID }: { postID: string }) {
     ? getAgentTechnicalID(postAgent)
     : post?.agentId ?? "";
 
+  function resolveAgentByIdentifier(identifier: string) {
+    const normalized = identifier.toLowerCase().trim();
+    return agents.find((agent) => {
+      const candidates = [
+        agent.id,
+        agent.agentAddress || "",
+        agent.treasuryAddress || "",
+      ];
+      return candidates.some((candidate) => candidate.toLowerCase().trim() === normalized);
+    });
+  }
+
+  function getEventActorMeta(event: { agentId: string; payload: { actorAddress?: string } }) {
+    const actorID = event.agentId || event.payload.actorAddress || "";
+    if (!actorID) {
+      return { label: "Agent", href: undefined as string | undefined };
+    }
+    const actorAgent = resolveAgentByIdentifier(actorID);
+    if (actorAgent) {
+      return {
+        label: getAgentDisplayName(actorAgent),
+        href: `/agent/${actorAgent.agentAddress || actorAgent.treasuryAddress || actorAgent.id}`,
+      };
+    }
+    if (event.payload.actorAddress) {
+      return {
+        label: shorten(event.payload.actorAddress),
+        href: undefined as string | undefined,
+      };
+    }
+    return {
+      label: shorten(actorID),
+      href: `/agent/${actorID}`,
+    };
+  }
+
+  const leadLikeActor = likes[0] ? getEventActorMeta(likes[0]) : null;
+
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <header className="sticky top-0 z-20 border-b border-black/10 bg-[var(--paper)]/80 backdrop-blur-md">
@@ -148,11 +186,22 @@ export function PostDetailShell({ postID }: { postID: string }) {
                   <Heart size={14} className="text-[var(--signal)] fill-[var(--signal)]" />
                   <span>
                     Liked by{" "}
-                    <button 
+                    {leadLikeActor?.href ? (
+                      <Link
+                        href={leadLikeActor.href}
+                        className="font-semibold text-[var(--ink)] hover:underline"
+                      >
+                        {leadLikeActor.label}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold text-[var(--ink)]">
+                        {leadLikeActor?.label}
+                      </span>
+                    )}
+                    <button
                       onClick={() => setShowLikesModal(true)}
                       className="font-semibold text-[var(--ink)] hover:underline"
                     >
-                      {likes[0].payload.actorAddress ? shorten(likes[0].payload.actorAddress) : likes[0].agentId}
                       {likes.length > 1 && ` and ${likes.length - 1} others`}
                     </button>
                   </span>
@@ -169,9 +218,16 @@ export function PostDetailShell({ postID }: { postID: string }) {
                 comments.map((comment) => (
                   <div key={comment.id} className="rounded-lg border border-black/5 bg-white/50 p-4">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="font-semibold text-sm">
-                        {comment.payload.actorAddress ? shorten(comment.payload.actorAddress) : comment.agentId}
-                      </span>
+                      {(() => {
+                        const actor = getEventActorMeta(comment);
+                        return actor.href ? (
+                          <Link href={actor.href} className="font-semibold text-sm hover:underline">
+                            {actor.label}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-sm">{actor.label}</span>
+                        );
+                      })()}
                       <span className="text-xs text-black/40">
                         {new Date(comment.timestamp).toLocaleTimeString()}
                       </span>
@@ -205,21 +261,39 @@ export function PostDetailShell({ postID }: { postID: string }) {
               </button>
             </div>
             <div className="max-h-64 overflow-y-auto p-2">
-              {likes.map((like) => (
-                <div key={like.id} className="flex items-center gap-3 p-3 hover:bg-black/5 rounded-lg transition-colors">
-                  <div className="grid size-8 place-items-center rounded-full bg-black/10">
-                    <Users2 size={14} className="text-black/50" />
+              {likes.map((like) => {
+                const actor = getEventActorMeta(like);
+                const content = (
+                  <>
+                    <div className="grid size-8 place-items-center rounded-full bg-black/10">
+                      <Users2 size={14} className="text-black/50" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{actor.label}</p>
+                      <p className="text-xs text-black/40 font-mono">
+                        {new Date(like.timestamp).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </>
+                );
+
+                return actor.href ? (
+                  <Link
+                    key={like.id}
+                    href={actor.href}
+                    className="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-black/5"
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <div
+                    key={like.id}
+                    className="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-black/5"
+                  >
+                    {content}
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">
-                      {like.payload.actorAddress ? shorten(like.payload.actorAddress) : like.agentId}
-                    </p>
-                    <p className="text-xs text-black/40 font-mono">
-                      {new Date(like.timestamp).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
