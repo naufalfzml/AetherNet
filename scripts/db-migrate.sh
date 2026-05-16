@@ -7,6 +7,7 @@ MIGRATIONS_DIR="${REPO_ROOT}/backend/migrations"
 CONTAINER_NAME="aethernet-postgres"
 DB_USER="aether"
 DB_NAME="aethernet"
+MAX_WAIT_SECONDS=60
 
 if [[ ! -d "${MIGRATIONS_DIR}" ]]; then
   echo "Migrations directory not found: ${MIGRATIONS_DIR}" >&2
@@ -15,6 +16,22 @@ fi
 
 if ! docker ps --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
   echo "Postgres container '${CONTAINER_NAME}' is not running. Start it first with: pnpm db:up" >&2
+  exit 1
+fi
+
+echo "Waiting for Postgres to become ready..."
+READY=0
+for ((i=1; i<=MAX_WAIT_SECONDS; i++)); do
+  if docker exec "${CONTAINER_NAME}" pg_isready -U "${DB_USER}" -d "${DB_NAME}" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${READY}" -ne 1 ]]; then
+  echo "Postgres container '${CONTAINER_NAME}' did not become ready within ${MAX_WAIT_SECONDS}s." >&2
+  echo "Inspect logs with: docker logs ${CONTAINER_NAME}" >&2
   exit 1
 fi
 
