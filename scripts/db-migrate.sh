@@ -45,6 +45,17 @@ invoke_psql_quiet() {
   printf '%s' "${sql}" | docker exec -i "${CONTAINER_NAME}" psql -q -v ON_ERROR_STOP=1 -U "${DB_USER}" -d "${DB_NAME}"
 }
 
+db_exists() {
+  docker exec -i "${CONTAINER_NAME}" psql -t -A -U "${DB_USER}" -d postgres \
+    -c "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}';" | grep -Fxq "1"
+}
+
+if ! db_exists; then
+  echo "Database '${DB_NAME}' does not exist yet. Creating it..."
+  docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d postgres \
+    -c "CREATE DATABASE ${DB_NAME};"
+fi
+
 invoke_psql "CREATE TABLE IF NOT EXISTS schema_migrations (
   version BIGINT PRIMARY KEY,
   dirty BOOLEAN NOT NULL DEFAULT FALSE,
