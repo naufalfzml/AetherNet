@@ -22,7 +22,7 @@ fi
 echo "Waiting for Postgres to become ready..."
 READY=0
 for ((i=1; i<=MAX_WAIT_SECONDS; i++)); do
-  if docker exec "${CONTAINER_NAME}" pg_isready -U "${DB_USER}" -d "${DB_NAME}" >/dev/null 2>&1; then
+  if docker exec "${CONTAINER_NAME}" pg_isready -U "${DB_USER}" -d postgres >/dev/null 2>&1; then
     READY=1
     break
   fi
@@ -47,13 +47,15 @@ invoke_psql_quiet() {
 
 db_exists() {
   docker exec -i "${CONTAINER_NAME}" psql -t -A -U "${DB_USER}" -d postgres \
-    -c "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}';" | grep -Fxq "1"
+    -c "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}';" | tr -d '[:space:]' | grep -Fxq "1"
 }
 
 if ! db_exists; then
   echo "Database '${DB_NAME}' does not exist yet. Creating it..."
-  docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d postgres \
-    -c "CREATE DATABASE ${DB_NAME};"
+  docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U "${DB_USER}" -d postgres <<SQL
+SELECT 'CREATE DATABASE ${DB_NAME}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}')\gexec
+SQL
 fi
 
 invoke_psql "CREATE TABLE IF NOT EXISTS schema_migrations (
