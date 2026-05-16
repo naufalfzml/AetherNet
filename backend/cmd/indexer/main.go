@@ -20,6 +20,8 @@ import (
 	"github.com/aethernet-0g/aethernet/backend/usecase"
 )
 
+const metadataBackfillPageSize = 100
+
 func main() {
 	cfg := config.Load()
 	if cfg.DatabaseURL == "" {
@@ -139,6 +141,73 @@ func runOnce(
 	}
 	if len(events) > 0 {
 		log.Printf("chain indexer indexed=%d cursor=%s", len(events), toBlock)
+	}
+	if storageClient != nil {
+		if err := backfillMissingAgentMetadata(ctx, agentRepo, metadataRepo, storageClient); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type agentLister interface {
+	ListAgents(ctx context.Context, limit int, offset int) ([]domain.Agent, error)
+	UpsertAgent(ctx context.Context, agent domain.Agent) error
+}
+
+type metadataUpserter interface {
+	UpsertMetadata(ctx context.Context, metadata domain.AgentMetadata) error
+}
+
+func backfillMissingAgentMetadata(
+	ctx context.Context,
+	agentRepo agentLister,
+	metadataRepo metadataUpserter,
+	storageClient usecase.ZGStorageClient,
+) error {
+	offset := 0
+	recovered := 0
+
+	for {
+		agents, err := agentRepo.ListAgents(ctx, metadataBackfillPageSize, offset)
+		if err != nil {
+			return err
+		}
+		if len(agents) == 0 {
+			break
+		}
+
+		for _, agent := range agents {
+			if strings.TrimSpace(agent.MetadataPointer) == "" || strings.TrimSpace(agent.PersonalitySummary) != "" {
+				continue
+			}
+			metadata, err := hydrateMetadata(ctx, storageClient, agent.MetadataPointer)
+			if err != nil {
+				log.Printf("indexer metadata backfill failed token=%s pointer=%s: %v", agent.TokenID, agent.MetadataPointer, err)
+				continue
+			}
+			metadata.MetadataPointer = agent.MetadataPointer
+			if err := metadataRepo.UpsertMetadata(ctx, metadata); err != nil {
+				return err
+			}
+			agent.PersonalitySummary = strings.TrimSpace(metadata.PersonalitySummary)
+			if agent.PersonalitySummary == "" {
+				agent.PersonalitySummary = strings.TrimSpace(metadata.Prompt)
+			}
+			if err := agentRepo.UpsertAgent(ctx, agent); err != nil {
+				return err
+			}
+			recovered++
+		}
+
+		if len(agents) < metadataBackfillPageSize {
+			break
+		}
+		offset += len(agents)
+	}
+
+	if recovered > 0 {
+		log.Printf("indexer metadata backfill recovered=%d", recovered)
 	}
 	return nil
 }
