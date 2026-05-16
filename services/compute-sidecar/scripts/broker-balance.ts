@@ -1,3 +1,7 @@
+import { loadEnvFile } from "../src/load-env.js";
+
+loadEnvFile();
+
 const stubMode = (process.env.STUB_MODE ?? "true") === "true";
 
 if (stubMode) {

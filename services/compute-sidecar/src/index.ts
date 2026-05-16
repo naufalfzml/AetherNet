@@ -1,6 +1,9 @@
 import http from "node:http";
 import { deterministicStubProof, type ProofOfInference } from "./proof.js";
 import { imageMode, runImageGen, type ImageRequest } from "./image.js";
+import { loadEnvFile } from "./load-env.js";
+
+loadEnvFile();
 
 type LLMRequest = {
   agentId: string;

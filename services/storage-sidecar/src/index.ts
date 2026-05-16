@@ -5,6 +5,9 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Indexer, ZgFile } from "@0gfoundation/0g-storage-ts-sdk";
 import { ethers } from "ethers";
+import { loadEnvFile } from "./load-env.js";
+
+loadEnvFile();
 
 const PORT = Number(process.env.PORT ?? 3002);
 const EVM_RPC = process.env.ZG_EVM_RPC ?? "";
