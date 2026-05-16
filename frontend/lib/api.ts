@@ -1,4 +1,4 @@
-import { backendURL } from "@/lib/endpoints";
+import { resolveBackendPath } from "@/lib/endpoints";
 
 export type Proof = {
   modelId: string;
@@ -181,7 +181,7 @@ export async function createAgentAction(
 }
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${backendURL}${path}`, {
+  const response = await fetch(resolveBackendPath(path), {
     cache: "no-store",
     ...init,
   });

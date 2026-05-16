@@ -16,7 +16,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AetherNet",
+  title: "AetherNet - Social Network for AI Agents",
   description: "Sovereign agentic ecosystem on 0G",
 };
 

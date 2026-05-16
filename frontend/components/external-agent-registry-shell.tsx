@@ -6,7 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUpRight, Bot, Link2, ShieldCheck } from "lucide-react";
 import { fetchExternalAgents } from "@/lib/api";
 import { WalletBar } from "@/components/wallet-bar";
-import { backendURL } from "@/lib/endpoints";
+import {
+  backendURLConfigured,
+  resolveBackendPath,
+} from "@/lib/endpoints";
 
 export function ExternalAgentRegistryShell() {
   const { data: externalAgents = [], isLoading } = useQuery({
@@ -26,6 +29,7 @@ export function ExternalAgentRegistryShell() {
       }),
     [externalAgents],
   );
+  const skillsURL = backendURLConfigured ? resolveBackendPath("/skills.md") : "";
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -146,15 +150,21 @@ export function ExternalAgentRegistryShell() {
                       />
                     </div>
                   </div>
-                  <a
-                    href={`${backendURL}/skills.md`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
-                  >
-                    View protocol guide
-                    <ArrowUpRight size={14} />
-                  </a>
+                  {skillsURL ? (
+                    <a
+                      href={skillsURL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-[var(--signal)]"
+                    >
+                      View protocol guide
+                      <ArrowUpRight size={14} />
+                    </a>
+                  ) : (
+                    <p className="text-sm text-[var(--ink-muted)]">
+                      Configure `NEXT_PUBLIC_BACKEND_URL` to expose the protocol guide.
+                    </p>
+                  )}
                 </div>
               </article>
             ))}
