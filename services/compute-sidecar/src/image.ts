@@ -21,32 +21,50 @@ export type ImageResponse = {
 
 type ImageMode = "mock" | "edit" | "generate";
 
-const MODE = (process.env.ZG_IMAGE_MODE ?? "mock") as ImageMode;
-const ROUTER_BASE_URL = (process.env.ZG_ROUTER_BASE_URL ?? "").replace(
-  /\/$/,
-  "",
-);
-const ROUTER_API_KEY = process.env.ZG_ROUTER_API_KEY ?? "";
-const IMAGE_MODEL = process.env.ZG_IMAGE_MODEL ?? "qwen/qwen-image-edit-2511";
-const IMAGE_SIZE = process.env.ZG_IMAGE_SIZE ?? "1024x1024";
-const VERIFY_TEE = (process.env.ZG_IMAGE_VERIFY_TEE ?? "true") === "true";
-const DEFAULT_ASSET_PATH = path.resolve(
-  process.cwd(),
-  "assets/default-avatar.jpg",
-);
-const MOCK_ASSET_PATH =
-  process.env.ZG_IMAGE_MOCK_PATH?.trim() || DEFAULT_ASSET_PATH;
-const SEED_IMAGE_PATH =
-  process.env.ZG_IMAGE_SEED_PATH?.trim() || MOCK_ASSET_PATH;
-const POLL_INTERVAL_MS = Number(process.env.ZG_IMAGE_POLL_INTERVAL_MS ?? 1500);
-const POLL_TIMEOUT_MS = Number(process.env.ZG_IMAGE_POLL_TIMEOUT_MS ?? 90_000);
+function getDefaultAssetPath() {
+  return path.resolve(process.cwd(), "assets/default-avatar.jpg");
+}
+
+function getImageConfig() {
+  const mode = (process.env.ZG_IMAGE_MODE ?? "mock") as ImageMode;
+  const routerBaseURL = (process.env.ZG_ROUTER_BASE_URL ?? "").replace(
+    /\/$/,
+    "",
+  );
+  const routerAPIKey = process.env.ZG_ROUTER_API_KEY ?? "";
+  const imageModel =
+    process.env.ZG_IMAGE_MODEL ?? "qwen/qwen-image-edit-2511";
+  const imageSize = process.env.ZG_IMAGE_SIZE ?? "1024x1024";
+  const verifyTEE = (process.env.ZG_IMAGE_VERIFY_TEE ?? "true") === "true";
+  const defaultAssetPath = getDefaultAssetPath();
+  const mockAssetPath =
+    process.env.ZG_IMAGE_MOCK_PATH?.trim() || defaultAssetPath;
+  const seedImagePath =
+    process.env.ZG_IMAGE_SEED_PATH?.trim() || mockAssetPath;
+  const pollIntervalMS = Number(process.env.ZG_IMAGE_POLL_INTERVAL_MS ?? 1500);
+  const pollTimeoutMS = Number(process.env.ZG_IMAGE_POLL_TIMEOUT_MS ?? 90_000);
+
+  return {
+    mode,
+    routerBaseURL,
+    routerAPIKey,
+    imageModel,
+    imageSize,
+    verifyTEE,
+    mockAssetPath,
+    seedImagePath,
+    pollIntervalMS,
+    pollTimeoutMS,
+  };
+}
 
 export function imageMode(): ImageMode {
-  return MODE;
+  return getImageConfig().mode;
 }
 
 export async function runImageGen(req: ImageRequest): Promise<ImageResponse> {
-  switch (MODE) {
+  const mode = imageMode();
+  switch (mode) {
     case "mock":
       return runMockImage(req);
     case "edit":
@@ -54,14 +72,15 @@ export async function runImageGen(req: ImageRequest): Promise<ImageResponse> {
     case "generate":
       return runRouterImageGenerate(req);
     default:
-      throw new Error(`unsupported ZG_IMAGE_MODE: ${MODE}`);
+      throw new Error(`unsupported ZG_IMAGE_MODE: ${mode}`);
   }
 }
 
 async function runMockImage(req: ImageRequest): Promise<ImageResponse> {
-  const bytes = await readFile(MOCK_ASSET_PATH);
+  const { mockAssetPath } = getImageConfig();
+  const bytes = await readFile(mockAssetPath);
   const base64 = bytes.toString("base64");
-  const contentType = guessContentType(MOCK_ASSET_PATH);
+  const contentType = guessContentType(mockAssetPath);
   console.log(
     `compute /infer/image ok mode=mock agent=${req.agentId} bytes=${bytes.length}`,
   );
@@ -80,29 +99,30 @@ async function runMockImage(req: ImageRequest): Promise<ImageResponse> {
 }
 
 async function runRouterImageEdit(req: ImageRequest): Promise<ImageResponse> {
-  assertRouterEnv();
-  const modelId = req.modelId ?? IMAGE_MODEL;
-  const seedBytes = await readFile(SEED_IMAGE_PATH);
-  const seedContentType = guessContentType(SEED_IMAGE_PATH);
+  const config = getImageConfig();
+  assertRouterEnv(config);
+  const modelId = req.modelId ?? config.imageModel;
+  const seedBytes = await readFile(config.seedImagePath);
+  const seedContentType = guessContentType(config.seedImagePath);
 
-  const submitUrl = `${ROUTER_BASE_URL}/async/images/edits${
-    VERIFY_TEE ? "?verify_tee=true" : ""
+  const submitUrl = `${config.routerBaseURL}/async/images/edits${
+    config.verifyTEE ? "?verify_tee=true" : ""
   }`;
   const form = new FormData();
   form.append("model", modelId);
   form.append("prompt", req.prompt);
   form.append("n", "1");
-  form.append("size", req.size ?? IMAGE_SIZE);
+  form.append("size", req.size ?? config.imageSize);
   form.append("response_format", "b64_json");
   form.append(
     "image",
     new Blob([new Uint8Array(seedBytes)], { type: seedContentType }),
-    path.basename(SEED_IMAGE_PATH),
+    path.basename(config.seedImagePath),
   );
 
   const submitRes = await fetch(submitUrl, {
     method: "POST",
-    headers: { Authorization: `Bearer ${ROUTER_API_KEY}` },
+    headers: { Authorization: `Bearer ${config.routerAPIKey}` },
     body: form,
   });
   if (!submitRes.ok) {
@@ -130,6 +150,7 @@ async function runRouterImageEdit(req: ImageRequest): Promise<ImageResponse> {
     jobId,
     providerAddress,
     modelId,
+    config,
   });
   console.log(
     `compute /infer/image ok mode=edit agent=${req.agentId} model=${modelId} jobId=${jobId} provider=${providerAddress} teeVerified=${polled.teeVerified}`,
@@ -152,22 +173,24 @@ async function pollImageJob(args: {
   jobId: string;
   providerAddress: string;
   modelId: string;
+  config: ReturnType<typeof getImageConfig>;
 }): Promise<{
   imageBase64: string;
   contentType: string;
   teeVerified: boolean;
 }> {
+  const { config } = args;
   const params = new URLSearchParams({
     provider_address: args.providerAddress,
     model: args.modelId,
   });
-  if (VERIFY_TEE) params.set("verify_tee", "true");
-  const url = `${ROUTER_BASE_URL}/async/jobs/${args.jobId}?${params}`;
+  if (config.verifyTEE) params.set("verify_tee", "true");
+  const url = `${config.routerBaseURL}/async/jobs/${args.jobId}?${params}`;
 
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  const deadline = Date.now() + config.pollTimeoutMS;
   while (Date.now() < deadline) {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${ROUTER_API_KEY}` },
+      headers: { Authorization: `Bearer ${config.routerAPIKey}` },
     });
     if (!res.ok) {
       throw new Error(`image poll failed ${res.status}: ${await res.text()}`);
@@ -208,30 +231,31 @@ async function pollImageJob(args: {
     if (status === "failed" || status === "error") {
       throw new Error(`image job failed: ${JSON.stringify(body)}`);
     }
-    await sleep(POLL_INTERVAL_MS);
+    await sleep(config.pollIntervalMS);
   }
   throw new Error(
-    `image job ${args.jobId} timed out after ${POLL_TIMEOUT_MS}ms`,
+    `image job ${args.jobId} timed out after ${config.pollTimeoutMS}ms`,
   );
 }
 
 async function runRouterImageGenerate(
   req: ImageRequest,
 ): Promise<ImageResponse> {
-  assertRouterEnv();
-  const modelId = req.modelId ?? IMAGE_MODEL;
-  const url = `${ROUTER_BASE_URL}/images/generations`;
+  const config = getImageConfig();
+  assertRouterEnv(config);
+  const modelId = req.modelId ?? config.imageModel;
+  const url = `${config.routerBaseURL}/images/generations`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${ROUTER_API_KEY}`,
+      Authorization: `Bearer ${config.routerAPIKey}`,
     },
     body: JSON.stringify({
       model: modelId,
       prompt: req.prompt,
       n: 1,
-      size: req.size ?? IMAGE_SIZE,
+      size: req.size ?? config.imageSize,
       response_format: "b64_json",
     }),
   });
@@ -271,8 +295,8 @@ async function runRouterImageGenerate(
   };
 }
 
-function assertRouterEnv(): void {
-  if (!ROUTER_BASE_URL || !ROUTER_API_KEY) {
+function assertRouterEnv(config: ReturnType<typeof getImageConfig>): void {
+  if (!config.routerBaseURL || !config.routerAPIKey) {
     throw new Error(
       "ZG_ROUTER_BASE_URL and ZG_ROUTER_API_KEY must be set when ZG_IMAGE_MODE != mock",
     );
